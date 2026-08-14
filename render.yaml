@@ -1,0 +1,13 @@
+# Render blueprint. AMAVAS is a stateful WebSocket server: one long-running process
+# holding the game in memory, so it needs a real web service, not serverless functions.
+services:
+  - type: web
+    name: amavas
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

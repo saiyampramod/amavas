@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" font-family="Georgia, serif">
+  <defs>
+    <linearGradient id="ackSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8432f"/>
+      <stop offset="1" stop-color="#f5a623"/>
+    </linearGradient>
+  </defs>
+
+  <!-- comic-cover border -->
+  <rect x="0" y="0" width="360" height="480" fill="#f4e3c1"/>
+  <rect x="10" y="10" width="340" height="460" fill="url(#ackSky)" stroke="#1a1a1a" stroke-width="6"/>
+
+  <!-- flat sunburst behind head -->
+  <g stroke="#1a1a1a" stroke-width="4">
+    <g fill="#ffd23f">
+      <polygon points="180,60 195,120 240,90 205,140 260,150 205,165 235,215 185,180 180,240 175,180 125,215 155,165 100,150 155,140 120,90 165,120"/>
+    </g>
+  </g>
+
+  <!-- skyline block colors, flat -->
+  <g stroke="#1a1a1a" stroke-width="4">
+    <rect x="18" y="360" width="50" height="96" fill="#2f5d8a"/>
+    <rect x="74" y="330" width="60" height="126" fill="#3f7a52"/>
+    <rect x="140" y="368" width="46" height="88" fill="#2f5d8a"/>
+    <rect x="192" y="322" width="64" height="134" fill="#3f7a52"/>
+    <rect x="262" y="358" width="46" height="98" fill="#2f5d8a"/>
+    <rect x="312" y="340" width="30" height="116" fill="#3f7a52"/>
+  </g>
+  <g fill="#ffd23f" stroke="#1a1a1a" stroke-width="2">
+    <rect x="86" y="345" width="12" height="12"/><rect x="110" y="345" width="12" height="12"/>
+    <rect x="206" y="340" width="12" height="12"/><rect x="230" y="340" width="12" height="12"/>
+    <rect x="270" y="372" width="10" height="10"/><rect x="292" y="372" width="10" height="10"/>
+  </g>
+
+  <!-- ground shadow -->
+  <ellipse cx="180" cy="452" rx="150" ry="16" fill="#1a1a1a" opacity="0.25"/>
+
+  <!-- BODY / SHOULDERS flat block -->
+  <path d="M95 340 C 95 300, 130 280, 180 280 C 230 280, 265 300, 265 340 L 275 456 L 85 456 Z"
+        fill="#7a2e2e" stroke="#1a1a1a" stroke-width="6"/>
+  <path d="M120 340 C 130 320, 150 312, 180 312 C 210 312, 230 320, 240 340 L 245 456 L 115 456 Z"
+        fill="#c9812f" stroke="#1a1a1a" stroke-width="5"/>
+  <circle cx="180" cy="380" r="12" fill="#ffd23f" stroke="#1a1a1a" stroke-width="4"/>
+
+  <!-- NECK -->
+  <rect x="160" y="255" width="40" height="40" fill="#3fae5c" stroke="#1a1a1a" stroke-width="5"/>
+
+  <!-- HORNS flat -->
+  <path d="M108 150 C 78 120, 72 80, 96 45 C 98 82, 112 106, 134 122 Z" fill="#f4e3c1" stroke="#1a1a1a" stroke-width="6"/>
+  <path d="M252 150 C 282 120, 288 80, 264 45 C 262 82, 248 106, 226 122 Z" fill="#f4e3c1" stroke="#1a1a1a" stroke-width="6"/>
+  <path d="M108 150 C 96 130, 96 110, 106 92" fill="none" stroke="#1a1a1a" stroke-width="3"/>
+  <path d="M252 150 C 264 130, 264 110, 254 92" fill="none" stroke="#1a1a1a" stroke-width="3"/>
+
+  <!-- HEAD flat green -->
+  <path d="M108 145 C 145 118, 215 118, 252 145 C 272 175, 270 232, 250 268 C 232 298, 208 312, 180 312 C 152 312, 128 298, 110 268 C 90 232, 88 175, 108 145 Z"
+        fill="#3fae5c" stroke="#1a1a1a" stroke-width="6"/>
+
+  <!-- ears -->
+  <path d="M100 210 C 74 198, 64 224, 84 248 C 90 234, 96 224, 108 220 Z" fill="#2f8a46" stroke="#1a1a1a" stroke-width="5"/>
+  <path d="M260 210 C 286 198, 296 224, 276 248 C 270 234, 264 224, 252 220 Z" fill="#2f8a46" stroke="#1a1a1a" stroke-width="5"/>
+
+  <!-- tilak -->
+  <path d="M180 138 C 175 152, 175 162, 180 174 C 185 162, 185 152, 180 138 Z" fill="#e8432f" stroke="#1a1a1a" stroke-width="3"/>
+
+  <!-- brows, bold flat -->
+  <path d="M118 182 C 136 168, 158 168, 172 180" fill="none" stroke="#1a1a1a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M242 182 C 224 168, 202 168, 188 180" fill="none" stroke="#1a1a1a" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- EYES flat comic style, bulging -->
+  <circle cx="146" cy="204" r="22" fill="#f4e3c1" stroke="#1a1a1a" stroke-width="5"/>
+  <circle cx="214" cy="204" r="22" fill="#f4e3c1" stroke="#1a1a1a" stroke-width="5"/>
+  <circle cx="150" cy="206" r="10" fill="#1a1a1a"/>
+  <circle cx="218" cy="206" r="10" fill="#1a1a1a"/>
+  <circle cx="154" cy="200" r="3" fill="#fff"/>
+  <circle cx="222" cy="200" r="3" fill="#fff"/>
+
+  <!-- nose -->
+  <path d="M180 214 C 172 228, 171 236, 180 244 C 189 236, 188 228, 180 214 Z" fill="#2f8a46" stroke="#1a1a1a" stroke-width="4"/>
+
+  <!-- moustache flat -->
+  <path d="M178 250 C 148 244, 124 248, 106 264 C 126 260, 144 262, 160 268 C 168 264, 174 258, 178 250 Z" fill="#1a1a1a"/>
+  <path d="M182 250 C 212 244, 236 248, 254 264 C 234 260, 216 262, 200 268 C 192 264, 186 258, 182 250 Z" fill="#1a1a1a"/>
+
+  <!-- grin, flat red -->
+  <path d="M128 270 C 152 296, 208 296, 232 270 C 226 302, 204 314, 180 314 C 156 314, 134 302, 128 270 Z"
+        fill="#7a2e2e" stroke="#1a1a1a" stroke-width="5"/>
+  <g fill="#f4e3c1" stroke="#1a1a1a" stroke-width="2">
+    <path d="M140 278 L 148 300 L 156 280 Z"/>
+    <path d="M204 280 L 212 300 L 220 278 Z"/>
+  </g>
+
+  <!-- speech-panel caption box, classic comic style -->
+  <path d="M40 30 L 210 30 L 200 70 L 60 70 Z" fill="#f4e3c1" stroke="#1a1a1a" stroke-width="5"/>
+  <text x="125" y="56" text-anchor="middle" fill="#1a1a1a" font-size="20" font-weight="bold" letter-spacing="1">THE RAKSHASA STRIKES!</text>
+
+  <!-- nameplate banner -->
+  <path d="M40 424 L 320 424 L 306 466 L 54 466 Z" fill="#1a1a1a"/>
+  <text x="180" y="450" text-anchor="middle" fill="#ffd23f" font-size="26" letter-spacing="5" font-weight="bold">RAKSHASA</text>
+</svg>

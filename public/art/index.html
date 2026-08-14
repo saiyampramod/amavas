@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>AMAVAS — cast sheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+  body { background:#111319; color:#e2e2eb; font-family:Epilogue,serif; margin:0; padding:32px; }
+  h1 { color:#98cbff; letter-spacing:-.02em; }
+  h2 { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.15em; text-transform:uppercase;
+       color:#8b949e; margin:32px 0 12px; font-weight:700; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; }
+  .card { background:#1e1f26; border:1px solid #30363d; border-radius:12px; padding:14px; text-align:center; }
+  .name { font-size:15px; font-weight:700; margin-top:10px; }
+  .kind { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+          color:#8b949e; margin-top:3px; }
+</style></head>
+<body>
+<h1>AMAVAS — the cast</h1>
+<div id="out"></div>
+<script src="portraits.js"></script>
+<script>
+  const groups = { 'Good — residents':[], 'Good — outsiders':[], 'Evil':[] };
+  for (const [name, r] of Object.entries(window.ROLE_ART)) {
+    const g = r.team === 'evil' ? 'Evil' : (['Old Monk','Aghori'].includes(name) ? 'Good — outsiders' : 'Good — residents');
+    groups[g].push(name);
+  }
+  document.getElementById('out').innerHTML = Object.entries(groups).map(([g, names]) =>
+    `<h2>${g}</h2><div class="grid">` + names.map(n =>
+      `<div class="card">${portraitSVG(n,{size:120})}<div class="name">${n}</div>
+       <div class="kind">${window.ROLE_ART[n].team}</div></div>`).join('') + '</div>').join('');
+</script>
+</body></html>

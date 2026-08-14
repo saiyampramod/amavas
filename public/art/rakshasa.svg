@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" font-family="Georgia, serif">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#170c2b"/>
+      <stop offset="0.7" stop-color="#2a1245"/>
+      <stop offset="1" stop-color="#3d1a5e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd54a" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffd54a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8e2f4f"/>
+      <stop offset="1" stop-color="#5e1c38"/>
+    </linearGradient>
+  </defs>
+
+  <!-- card -->
+  <rect x="6" y="6" width="348" height="468" rx="22" fill="url(#sky)" stroke="#c9a227" stroke-width="4"/>
+
+  <!-- stars -->
+  <g fill="#e8e2f4">
+    <circle cx="50" cy="60" r="2"/><circle cx="90" cy="40" r="1.4"/><circle cx="300" cy="55" r="2"/>
+    <circle cx="270" cy="90" r="1.3"/><circle cx="40" cy="120" r="1.5"/><circle cx="320" cy="130" r="1.6"/>
+    <circle cx="180" cy="35" r="1.5"/><circle cx="230" cy="45" r="1.2"/><circle cx="120" cy="70" r="1.2"/>
+  </g>
+  <!-- moonless: a dark hole where the moon should be -->
+  <circle cx="300" cy="85" r="24" fill="#0e0719" stroke="#4b3a72" stroke-width="2" stroke-dasharray="4 5"/>
+
+  <!-- eye glow -->
+  <ellipse cx="180" cy="205" rx="130" ry="100" fill="url(#glow)"/>
+
+  <!-- horns -->
+  <g stroke="#1a0f2e" stroke-width="6" stroke-linejoin="round">
+    <path d="M105 155 C 75 130, 68 95, 88 62 C 92 95, 106 115, 128 130 Z" fill="#e8c86a"/>
+    <path d="M255 155 C 285 130, 292 95, 272 62 C 268 95, 254 115, 232 130 Z" fill="#e8c86a"/>
+  </g>
+
+  <!-- ears -->
+  <g stroke="#1a0f2e" stroke-width="6" stroke-linejoin="round" fill="#7c2946">
+    <path d="M96 210 C 70 200, 62 225, 82 245 C 88 232, 94 224, 106 220 Z"/>
+    <path d="M264 210 C 290 200, 298 225, 278 245 C 272 232, 266 224, 254 220 Z"/>
+  </g>
+  <!-- earrings -->
+  <circle cx="84" cy="252" r="9" fill="none" stroke="#e8c86a" stroke-width="4"/>
+  <circle cx="276" cy="252" r="9" fill="none" stroke="#e8c86a" stroke-width="4"/>
+
+  <!-- face -->
+  <path d="M110 140 C 150 118, 210 118, 250 140 C 272 168, 274 226, 258 262 C 240 296, 214 312, 180 312 C 146 312, 120 296, 102 262 C 86 226, 88 168, 110 140 Z"
+        fill="url(#face)" stroke="#1a0f2e" stroke-width="6"/>
+
+  <!-- tilak -->
+  <path d="M180 132 C 174 148, 174 160, 180 174 C 186 160, 186 148, 180 132 Z" fill="#ffb347" stroke="#1a0f2e" stroke-width="3"/>
+
+  <!-- brows -->
+  <path d="M120 180 C 138 168, 158 168, 170 178" fill="none" stroke="#1a0f2e" stroke-width="7" stroke-linecap="round"/>
+  <path d="M240 180 C 222 168, 202 168, 190 178" fill="none" stroke="#1a0f2e" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- eyes -->
+  <g>
+    <ellipse cx="145" cy="200" rx="20" ry="16" fill="#ffd54a" stroke="#1a0f2e" stroke-width="5"/>
+    <ellipse cx="215" cy="200" rx="20" ry="16" fill="#ffd54a" stroke="#1a0f2e" stroke-width="5"/>
+    <ellipse cx="145" cy="201" rx="5" ry="11" fill="#1a0f2e"/>
+    <ellipse cx="215" cy="201" rx="5" ry="11" fill="#1a0f2e"/>
+    <circle cx="149" cy="195" r="2.6" fill="#fff"/>
+    <circle cx="219" cy="195" r="2.6" fill="#fff"/>
+  </g>
+
+  <!-- nose -->
+  <path d="M180 208 C 173 222, 172 230, 180 236 C 188 230, 187 222, 180 208 Z" fill="#4a142b" stroke="#1a0f2e" stroke-width="4"/>
+
+  <!-- moustache -->
+  <g fill="#1a0f2e">
+    <path d="M178 242 C 150 236, 128 240, 112 254 C 130 252, 146 254, 160 260 C 168 256, 174 250, 178 242 Z"/>
+    <path d="M182 242 C 210 236, 232 240, 248 254 C 230 252, 214 254, 200 260 C 192 256, 186 250, 182 242 Z"/>
+  </g>
+
+  <!-- grin -->
+  <path d="M126 262 C 150 286, 210 286, 234 262 C 228 296, 206 308, 180 308 C 154 308, 132 296, 126 262 Z"
+        fill="#2b0d1c" stroke="#1a0f2e" stroke-width="5"/>
+  <!-- fangs -->
+  <g fill="#fff8e7" stroke="#1a0f2e" stroke-width="3">
+    <path d="M138 268 L 146 290 L 154 270 Z"/>
+    <path d="M206 270 L 214 290 L 222 268 Z"/>
+    <path d="M166 276 L 171 288 L 176 277 Z"/>
+    <path d="M184 277 L 189 288 L 194 276 Z"/>
+  </g>
+
+  <!-- collar / shawl hint -->
+  <path d="M110 318 C 140 336, 220 336, 250 318 L 262 352 L 98 352 Z" fill="#3d1a5e" stroke="#1a0f2e" stroke-width="5"/>
+  <circle cx="180" cy="334" r="8" fill="#e8c86a" stroke="#1a0f2e" stroke-width="3"/>
+
+  <!-- apartment skyline -->
+  <g stroke="#0e0719" stroke-width="3">
+    <rect x="20" y="380" width="52" height="80" fill="#1c1030"/>
+    <rect x="76" y="360" width="60" height="100" fill="#241340"/>
+    <rect x="140" y="392" width="46" height="68" fill="#1c1030"/>
+    <rect x="190" y="356" width="64" height="104" fill="#241340"/>
+    <rect x="258" y="384" width="48" height="76" fill="#1c1030"/>
+    <rect x="310" y="368" width="34" height="92" fill="#241340"/>
+  </g>
+  <!-- windows: all dark but one -->
+  <g fill="#171027">
+    <rect x="86" y="372" width="12" height="12"/><rect x="112" y="372" width="12" height="12"/>
+    <rect x="86" y="394" width="12" height="12"/><rect x="112" y="394" width="12" height="12"/>
+    <rect x="200" y="368" width="12" height="12"/><rect x="226" y="368" width="12" height="12"/>
+    <rect x="200" y="390" width="12" height="12"/><rect x="30" y="392" width="12" height="12"/>
+    <rect x="50" y="392" width="12" height="12"/><rect x="268" y="396" width="12" height="12"/>
+    <rect x="288" y="396" width="12" height="12"/><rect x="318" y="380" width="10" height="12"/>
+  </g>
+  <rect x="226" y="390" width="12" height="12" fill="#ffd54a"/>
+
+  <!-- nameplate -->
+  <rect x="60" y="418" width="240" height="44" rx="10" fill="#170c2b" stroke="#c9a227" stroke-width="3"/>
+  <text x="180" y="440" text-anchor="middle" fill="#e8c86a" font-size="24" letter-spacing="6" font-weight="bold">RAKSHASA</text>
+  <text x="180" y="456" text-anchor="middle" fill="#9c92b8" font-size="11" font-style="italic">the demon of the moonless night</text>
+</svg>

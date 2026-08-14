@@ -1,0 +1,19 @@
+node_modules/
+
+# generated artefacts — rebuild with `node make-cast-page.js` / `make-download-page.js`
+cast-page.html
+download-page.html
+AMAVAS-story-modes.pdf
+public/AMAVAS-story-modes.pdf
+public/art/cast-sheet.svg
+
+# the standalone static rulebook site has its own repo
+site/
+
+# scratch
+*.bak
+err.txt
+out.txt
+st-err.txt
+st-out.txt
+rolelist.json
