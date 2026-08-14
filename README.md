@@ -147,10 +147,19 @@ the free tiers sleep when idle, so open the page a minute before game night star
 
 ## Testing
 
-Run a server on port 3100 first (`$env:PORT='3100'; node server.js`), one per game —
-a finished game stays in its "over" state until the host starts a new one.
+Run a server on port 3100 first: `$env:PORT='3100'; node server.js`
 
-- `node smoke.js 8 monsoon` — full automated 8-bot game on a given story mode.
-- `node smoke-st.js 9 maya` — same, but one bot storytells and answers every judgement call.
-- `node smoke-st-drop.js` — the Storyteller quits mid-judgement; the game must still finish.
-- `node demo-bots.js 4` — 4 bots join the live game on port 3000 and play along.
+| Command | What it proves |
+|---|---|
+| `node stress.js 1` | 27 games across every story mode and player count (5–20), both modes, plus "play again". Checks each reveal names exactly one demon and covers every seat. |
+| `node check-prompts.js` | Every living player gets a night prompt, so nobody can tell who has a power |
+| `node check-beats.js` | Every death and eviction raises its own headline moment |
+| `node check-recovery.js` | A player who drops mid-game reconnects to the same seat and secret role |
+| `node check-stale.js` | A token for a room that no longer exists returns you to the front door |
+| `node check-sweep.js` | Abandoned rooms are reclaimed (pair with `ROOM_TTL_MS=4000`) |
+| `node smoke.js 8 monsoon` | One full bot game on a given story mode |
+| `node smoke-st.js 9 maya` | Same, with a bot storytelling and answering judgement calls |
+| `node smoke-st-drop.js` | The Storyteller quits mid-judgement; the game must still finish |
+
+To play against bots yourself: `node server.js`, then `node demo.js 6 amavas 3000` —
+it opens a room, prints the code, and waits for a human before starting.
