@@ -10,16 +10,16 @@ the game runs itself.
 
 ## How to start a game night
 
-1. On this PC, in the `Jamie games/amavas` folder, run:
-
 ```bash
 node server.js
 ```
 
-2. The terminal prints an address like `http://192.168.1.5:3000`.
-   Everyone on the **same WiFi** opens that address on their phone and enters their name.
-3. The first person to join is the **host** — they press *Begin the first night* once
-   everyone (5–20 people) is in.
+The terminal prints an address like `http://192.168.1.5:3000`. Everyone on the **same WiFi**
+opens it on their phone. One person taps **Start a new game** and gets a 4-letter room code;
+everyone else types that code. Once 5–20 people are in, the host presses *Begin the first night*.
+
+Many groups can play on one server at the same time — each room code is a separate game.
+To put it on the internet instead of house WiFi, see [DEPLOY.md](DEPLOY.md).
 
 ## How to play
 
