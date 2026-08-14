@@ -5,6 +5,9 @@ let ws, state = null, myToken = localStorage.getItem('nf_token');
 let joinError = '', selected = null, sheet = null, drawer = false, roleOpen = false, sheetScript = null;
 let whisperTo = null;
 let lastName = localStorage.getItem('nf_name') || '';
+let catalog = null;            // story modes + casts, sent on connect
+let booted = false;            // has the opening screen finished?
+let connected = false, slowWake = false, learnOpen = false, learnMode = null;
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -14,11 +17,18 @@ const ms = (n, cls) => `<span class="ms ${cls || ''}">${n}</span>`;
 // ---------------------------------------------------------------- socket
 function connect() {
   let delay = 800;
+  // A sleeping free-tier server can take ~30s to wake. Say so rather than look broken.
+  setTimeout(() => { if (!connected) { slowWake = true; render(); } }, 4000);
   const open = () => {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-    ws.onopen = () => { delay = 800; if (myToken) send({ type: 'join', token: myToken }); };
+    ws.onopen = () => {
+      delay = 800; connected = true; slowWake = false;
+      if (myToken) send({ type: 'join', token: myToken });
+      render();
+    };
     ws.onmessage = e => {
       const m = JSON.parse(e.data);
+      if (m.type === 'hello') { catalog = m.scripts; render(); return; }
       if (m.type === 'joined') { myToken = m.token; localStorage.setItem('nf_token', myToken); }
       else if (m.type === 'left') {
         myToken = null; localStorage.removeItem('nf_token');
@@ -30,7 +40,10 @@ function connect() {
         state = m; joinError = ''; render();
       }
     };
-    ws.onclose = () => { setTimeout(open, delay); delay = Math.min(delay * 2, 15000); };
+    ws.onclose = () => {
+      connected = false; render();
+      setTimeout(open, delay); delay = Math.min(delay * 2, 15000);
+    };
     ws.onerror = () => ws.close();
   };
   open();
@@ -101,8 +114,140 @@ function dossier(p, opts) {
 }
 
 // ---------------------------------------------------------------- screens
+// ---------------------------------------------------------------- opening screen
+function bootScreen() {
+  const msg = !connected
+    ? (slowWake ? 'Waking the village…' : 'Lighting the lamps…')
+    : 'Ready';
+  return `<main class="min-h-dvh flex flex-col items-center justify-center px-gutter text-center gap-7 relative overflow-hidden">
+    <div class="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(255,111,95,.10),transparent_62%)]"></div>
+    <div class="w-32 h-32 rounded-full overflow-hidden boot-moon">${portraitSVG('Rakshasa', { size: 128 })}</div>
+    <div class="boot-fade">
+      <h1 class="font-display-lg text-display-lg text-primary tracking-tighter">AMAVAS</h1>
+      <p class="font-label-caps text-label-caps text-text-muted uppercase tracking-[0.35em] mt-2">The moonless night</p>
+    </div>
+    <div class="w-40 h-[3px] rounded-full bg-surface-container overflow-hidden boot-fade">
+      <div class="h-full w-1/3 bg-primary boot-bar"></div>
+    </div>
+    <p class="font-label-mono text-label-mono text-text-muted boot-fade">${esc(msg)}</p>
+    ${slowWake ? `<p class="font-body-md text-[13.5px] text-text-muted max-w-[280px] boot-fade">
+      The server sleeps when nobody is playing. This first wake takes up to half a minute.</p>` : ''}
+  </main>`;
+}
+
+// ---------------------------------------------------------------- learn the game
+function learnOverlay() {
+  const modes = catalog || [];
+  const sc = learnMode ? modes.find(m => m.id === learnMode) : null;
+
+  if (sc) {
+    const group = (label, kind) => {
+      const rs = sc.roles.filter(r => r.kind === kind);
+      if (!rs.length) return '';
+      return `<h4 class="font-label-caps text-label-caps text-text-muted uppercase mt-6 mb-3">${label}</h4>
+        <div class="flex flex-col gap-stack-gap">${rs.map(r => `
+          <div class="glass-panel rounded-xl border border-border-subtle p-3 flex items-start gap-3">
+            <div class="w-12 h-12 rounded-full overflow-hidden shrink-0">${portraitSVG(r.name, { size: 48 })}</div>
+            <div class="min-w-0">
+              <div class="font-headline-md text-[18px] leading-tight ${r.team === 'evil' ? 'text-tertiary-container' : 'text-primary'}">
+                ${esc(r.icon || '')} ${esc(r.name)}</div>
+              <p class="font-body-md text-[14px] text-on-surface-variant mt-1">${esc(r.blurb)}</p>
+            </div>
+          </div>`).join('')}</div>`;
+    };
+    return `<div class="fixed inset-0 z-[70] bg-background/97 backdrop-blur-xl overflow-y-auto">
+      <header class="sticky top-0 h-16 px-margin-sm flex items-center gap-2 bg-surface/90 backdrop-blur-xl border-b border-white/10">
+        <button data-act="learnBack" class="p-2 -ml-2 text-on-surface-variant">${ms('arrow_back', 'o')}</button>
+        <h2 class="font-headline-md text-headline-md text-primary tracking-tighter truncate flex-1">${esc(sc.name)}</h2>
+        <button data-act="closeLearn" class="p-2 -mr-2 text-on-surface-variant">${ms('close', 'o')}</button>
+      </header>
+      <div class="px-gutter pb-12 max-w-lg mx-auto">
+        <p class="font-label-mono text-[11px] text-primary uppercase tracking-wider mt-5">${esc(sc.tag)}</p>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-2">${esc(sc.blurb)}</p>
+        ${group('Residents — good', 'villager')}${group('Outsiders — good, but awkward', 'outsider')}
+        ${group('Minions — evil', 'minion')}${group('The demon', 'demon')}
+      </div>
+    </div>`;
+  }
+
+  const step = (n, title, body) => `<div class="flex gap-3">
+    <span class="shrink-0 w-7 h-7 rounded-lg border border-border-subtle text-primary
+      font-label-mono text-[11px] flex items-center justify-center">${n}</span>
+    <div class="min-w-0"><div class="font-headline-md text-[17px] text-text-high-contrast">${title}</div>
+    <p class="font-body-md text-[14.5px] text-on-surface-variant mt-1">${body}</p></div></div>`;
+
+  return `<div class="fixed inset-0 z-[70] bg-background/97 backdrop-blur-xl overflow-y-auto">
+    <header class="sticky top-0 h-16 px-margin-sm flex justify-between items-center bg-surface/90 backdrop-blur-xl border-b border-white/10">
+      <h2 class="font-headline-md text-headline-md text-primary tracking-tighter">How to play</h2>
+      <button data-act="closeLearn" class="p-2 -mr-2 text-on-surface-variant">${ms('close', 'o')}</button>
+    </header>
+    <div class="px-gutter pb-12 max-w-lg mx-auto flex flex-col gap-8">
+      <section class="pt-5">
+        <p class="font-body-lg text-body-lg text-on-surface-variant">
+          Everyone is a resident of one apartment society. One of you is a
+          <b class="text-tertiary-container">Rakshasa</b> — a demon that eats someone every night.
+          Nobody knows who anyone is. <b class="text-on-surface">You talk out loud, face to face</b>;
+          the phone only holds your secret and your vote.</p>
+      </section>
+      <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-4">A round</h3>
+        <div class="flex flex-col gap-4">
+          ${step(1, 'Night', 'Phones down, nobody speaks. If your role acts at night, your phone asks you to pick someone. Then it tells you what you learned — and some of you are being lied to.')}
+          ${step(2, 'Day', 'Someone is dead. Argue. Claim a role, or lie about one. Compare what people say they learned.')}
+          ${step(3, 'Accuse', 'Anyone can accuse one person per day. If at least half the living agree, they go <i>on the block</i>. A later accusation needs <b>more</b> votes to take their place.')}
+          ${step(4, 'Dusk', 'Whoever is on the block is cast out, and their role stays secret. Then night falls again.')}
+        </div>
+      </section>
+      <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">Winning</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="glass-panel rounded-xl border border-primary/25 p-4">
+            <p class="font-headline-md text-[17px] text-primary">Good wins</p>
+            <p class="font-body-md text-[14px] text-on-surface-variant mt-1">the moment the demon dies.</p></div>
+          <div class="glass-panel rounded-xl border border-tertiary-container/25 p-4">
+            <p class="font-headline-md text-[17px] text-tertiary-container">Evil wins</p>
+            <p class="font-body-md text-[14px] text-on-surface-variant mt-1">when evil is no longer outnumbered.</p></div>
+        </div>
+      </section>
+      <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">Three things that trip people up</h3>
+        <div class="flex flex-col gap-2">
+          ${[['Dead players keep playing', 'You can still talk, argue and be believed. You get one ghost vote for the whole rest of the game — spend it well.'],
+             ['Your information can be false', 'Poisoned and drunk players are told things that simply are not true, and they have no idea. A confident claim is not proof.'],
+             ['Evil knows each other', 'The demon and its minions wake together on night one. Good players start knowing nothing at all.']]
+            .map(([t, b]) => `<div class="glass-panel rounded-xl border border-border-subtle p-3">
+              <p class="font-headline-md text-[16px] text-text-high-contrast">${t}</p>
+              <p class="font-body-md text-[14px] text-on-surface-variant mt-1">${b}</p></div>`).join('')}
+        </div>
+      </section>
+      <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">The story modes</h3>
+        <p class="font-body-md text-[14.5px] text-on-surface-variant mb-3">
+          Each one is a different cast with its own villain. Tap to meet them.</p>
+        <div class="flex flex-col gap-stack-gap">${modes.map(m => `
+          <button data-learn="${m.id}" class="dossier-card glass-panel rounded-xl border border-border-subtle p-3
+            flex items-center gap-3 text-left active:scale-[.99]">
+            <div class="w-12 h-12 rounded-full overflow-hidden shrink-0">${portraitSVG(m.demon, { size: 48 })}</div>
+            <div class="min-w-0 flex-1">
+              <div class="font-headline-md text-[18px] text-text-high-contrast">${esc(m.name)}</div>
+              <div class="font-label-mono text-[11px] text-text-muted uppercase truncate">${esc(m.tag)}</div>
+            </div>
+            <span class="font-label-caps text-[9px] uppercase text-primary shrink-0">${m.roles.length} roles</span>
+            ${ms('chevron_right', 'o')}
+          </button>`).join('') || '<p class="font-label-mono text-label-mono text-text-muted">Connecting…</p>'}</div>
+      </section>
+    </div>
+  </div>`;
+}
+
 function joinScreen() {
-  return `<main class="min-h-dvh flex flex-col items-center justify-center px-gutter text-center gap-6 py-10">
+  return `<main class="min-h-dvh flex flex-col px-gutter pb-10">
+    <div class="w-full max-w-sm mx-auto pt-5 shrink-0">
+      <button data-act="learn" class="w-full h-12 rounded-xl border border-primary/30 bg-primary/5
+        text-primary font-label-caps text-label-caps uppercase tracking-widest flex items-center justify-center gap-2
+        active:scale-[.98] transition">${ms('menu_book', 'o')} New here? Learn the game</button>
+    </div>
+    <div class="flex-1 flex flex-col items-center justify-center text-center gap-6 py-8">
     <div class="w-24 h-24 rounded-full overflow-hidden pulse-ring">${portraitSVG('Rakshasa', { size: 96 })}</div>
     <div>
       <h1 class="font-display-lg text-display-lg text-primary tracking-tighter">AMAVAS</h1>
@@ -126,6 +271,7 @@ function joinScreen() {
         placeholder:tracking-[0.4em] focus:border-primary/50 focus:ring-0"/>
       ${bigBtn('join', 'Join that game', 'login', 'ghost')}
       ${joinError ? `<p class="text-tertiary-container font-label-mono text-label-mono mt-1">${esc(joinError)}</p>` : ''}
+    </div>
     </div>
   </main>`;
 }
@@ -718,9 +864,13 @@ function sheetOverlay() {
 const nameOf = id => { const p = state.players.find(x => x.id === id); return p ? p.name : ''; };
 
 function render() {
+  if (typeof maybeFinishBoot === 'function') maybeFinishBoot();
+  if (!booted) { app().innerHTML = bootScreen(); overlay().innerHTML = ''; return; }
   if (!state || !state.you) {
     roleOpen = drawer = false; sheet = null;
-    app().innerHTML = joinScreen(); overlay().innerHTML = ''; wire(); return;
+    app().innerHTML = joinScreen();
+    overlay().innerHTML = learnOpen ? learnOverlay() : '';
+    wire(); return;
   }
   const s = state.phase;
   const st = state.you.storyteller;
@@ -783,6 +933,8 @@ document.addEventListener('click', e => {
   if (dec) { send({ type: 'decision', option: dec.dataset.decide }); return; }
   const msgBtn = e.target.closest('[data-msg]');
   if (msgBtn) { whisperTo = msgBtn.dataset.msg; render(); return; }
+  const learnBtn = e.target.closest('[data-learn]');
+  if (learnBtn) { learnMode = learnBtn.dataset.learn; render(); return; }
   const rolesBtn = e.target.closest('[data-roles]');
   if (rolesBtn) { sheetScript = rolesBtn.dataset.roles; render(); return; }
   const sc = e.target.closest('[data-script]');
@@ -792,7 +944,10 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   const a = btn.dataset.act;
-  if (a === 'join') doJoin(false);
+  if (a === 'learn') { learnOpen = true; learnMode = null; render(); }
+  else if (a === 'closeLearn') { learnOpen = false; learnMode = null; render(); }
+  else if (a === 'learnBack') { learnMode = null; render(); }
+  else if (a === 'join') doJoin(false);
   else if (a === 'create') doJoin(true);
   else if (a === 'leave') {
     if (confirm('Leave this game and go back?')) send({ type: 'leave' });
@@ -844,6 +999,45 @@ document.addEventListener('click', e => {
     whisperTo = null; render();
   }
 });
+
+// ---------------------------------------------------------------- app behaviour
+// Keep the phone awake. A round can be ten minutes of talking with nobody touching a screen,
+// and having everyone's phone lock mid-vote is miserable.
+let wakeLock = null;
+async function keepAwake() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch { /* denied, or battery saver — not worth telling the player */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    if (!wakeLock) keepAwake();
+    // phones suspend sockets in the background; get back in sync immediately
+    if (ws && ws.readyState !== 1) { connected = false; render(); }
+  }
+});
+document.addEventListener('click', () => { if (!wakeLock) keepAwake(); }, { once: true });
+
+// Two layers of keepalive: a light ws message so proxies see traffic, and an occasional
+// HTTP hit so a free-tier host counts the service as in use during a long discussion.
+setInterval(() => { if (ws && ws.readyState === 1) send({ type: 'ping' }); }, 25000);
+setInterval(() => {
+  if (state && state.you) fetch('/healthz', { cache: 'no-store' }).catch(() => {});
+}, 4 * 60 * 1000);
+
+// ---------------------------------------------------------------- boot
+function maybeFinishBoot() {
+  if (booted) return;
+  if (!connected || !bootMinElapsed || !fontsReady) return;
+  booted = true;
+  render();
+}
+let bootMinElapsed = false, fontsReady = false;
+setTimeout(() => { bootMinElapsed = true; maybeFinishBoot(); }, 1500);
+(document.fonts ? document.fonts.ready : Promise.resolve())
+  .then(() => { fontsReady = true; maybeFinishBoot(); });
 
 render();
 connect();

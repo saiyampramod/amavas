@@ -4,6 +4,15 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" name="viewport"/>
 <title>AMAVAS</title>
+<!-- installable: Add to Home Screen gives a full-screen app with no browser chrome -->
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="theme-color" content="#111319"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Amavas"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<link rel="icon" href="icon.svg" type="image/svg+xml"/>
 <!-- vendored locally: game night WiFi may have no internet (see vendor-assets.js) -->
 <script src="vendor/tailwind.js"></script>
 <link href="vendor/fonts.css" rel="stylesheet"/>
@@ -83,6 +92,17 @@ tailwind.config = {
     content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .1; z-index: 30;
     background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(152,203,255,.25) 3px, transparent 4px);
   }
+  /* opening screen */
+  @keyframes bootRise { from { opacity:0; transform: translateY(10px) scale(.94); } to { opacity:1; transform:none; } }
+  @keyframes bootGlow {
+    0%,100% { filter: drop-shadow(0 0 18px rgba(255,111,95,.18)); }
+    50%     { filter: drop-shadow(0 0 34px rgba(255,111,95,.42)); }
+  }
+  @keyframes bootSlide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+  .boot-moon { animation: bootRise .7s ease both, bootGlow 3s ease-in-out infinite .7s; }
+  .boot-fade { animation: bootRise .7s ease both .18s; }
+  .boot-bar  { animation: bootSlide 1.4s ease-in-out infinite; }
+
   /* role reveal: hidden until held */
   #revealArea .veil { transition: opacity .18s ease; }
   #revealArea.revealing .veil { opacity: 0; pointer-events: none; }

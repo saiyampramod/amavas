@@ -130,6 +130,16 @@ function grimoire() {
   }));
 }
 
+// Every story mode and its cast. Sent on connect so the tutorial works before joining.
+function scriptCatalogue() {
+  return Object.entries(SCRIPTS).map(([id, sc]) => ({
+    id, name: sc.name, tag: sc.tag, blurb: sc.blurb, difficulty: sc.difficulty,
+    demon: sc.demon, demonIcon: ROLES[sc.demon].icon,
+    roles: [...sc.villagers, FILLER, ...sc.outsiders, ...sc.minions, sc.demon]
+      .map(r => ({ name: r, icon: ROLES[r].icon, team: ROLES[r].team, kind: ROLES[r].kind, blurb: ROLES[r].blurb })),
+  }));
+}
+
 function stateFor(p) {
   const s = {
     type: 'state',
@@ -170,14 +180,7 @@ function stateFor(p) {
       options: d.options.map(o => ({ id: o.id, label: o.label, hint: o.hint || null })),
     } : null;
   }
-  if (game.phase === 'lobby') {
-    s.scripts = Object.entries(SCRIPTS).map(([id, sc]) => ({
-      id, name: sc.name, tag: sc.tag, blurb: sc.blurb, difficulty: sc.difficulty,
-      demon: sc.demon, demonIcon: ROLES[sc.demon].icon,
-      roles: [...sc.villagers, ...sc.outsiders, ...sc.minions, sc.demon]
-        .map(r => ({ name: r, icon: ROLES[r].icon, team: ROLES[r].team, kind: ROLES[r].kind, blurb: ROLES[r].blurb })),
-    }));
-  }
+  if (game.phase === 'lobby') s.scripts = scriptCatalogue();
   if (game.phase === 'over') {
     // players who joined after the game ended have no role yet — they are in the
     // next game, not this reveal
@@ -1147,6 +1150,13 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+  // the client needs the cast before it has joined anything, for the tutorial
+  ws.send(JSON.stringify({
+    type: 'hello', scripts: scriptCatalogue(),
+    minPlayers: MIN_PLAYERS, maxPlayers: MAX_PLAYERS,
+  }));
   ws.on('message', raw => handleMessage(ws, raw));
   ws.on('close', () => {
     const bind = sockets.get(ws);
@@ -1163,6 +1173,16 @@ wss.on('connection', ws => {
     }
   });
 });
+
+// A long day-phase argument is minutes of silence. Without traffic, hosting proxies drop
+// the socket and free tiers spin the service down mid-game — so keep the line warm.
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) { ws.terminate(); continue; }
+    ws.isAlive = false;
+    try { ws.ping(); } catch { /* already closing */ }
+  }
+}, 30000).unref();
 
 server.listen(PORT, () => {
   const nets = require('os').networkInterfaces();
