@@ -53,7 +53,15 @@ tailwind.config = {
 </script>
 <style>
   html, body { background: #111319; }
-  body { min-height: 100dvh; -webkit-tap-highlight-color: transparent; }
+  body {
+    min-height: 100dvh; -webkit-tap-highlight-color: transparent;
+    /* iOS: kill the double-tap-to-zoom delay and wobble */
+    touch-action: manipulation;
+    overscroll-behavior-y: none;
+  }
+  /* Text you tap shouldn't select/magnify like a document. Inputs stay selectable. */
+  button, .dossier-card, h1, h2, h3, h4, .ms { -webkit-user-select: none; user-select: none; }
+  input, textarea { -webkit-user-select: text; user-select: text; font-size: 16px; }
   /* film grain */
   body::before {
     content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: .75;
@@ -114,6 +122,19 @@ tailwind.config = {
 <body class="bg-background text-on-background antialiased font-body-md">
   <div id="app"></div>
   <div id="overlay"></div>
+  <script>
+    // iOS Safari ignores maximum-scale, so block pinch- and double-tap-zoom directly.
+    // This is a game UI, not a document — zooming only ever breaks the layout mid-vote.
+    for (const evt of ['gesturestart', 'gesturechange', 'gestureend']) {
+      document.addEventListener(evt, e => e.preventDefault(), { passive: false });
+    }
+    let lastTouch = 0;
+    document.addEventListener('touchend', e => {
+      const now = Date.now();
+      if (now - lastTouch <= 320) e.preventDefault();
+      lastTouch = now;
+    }, { passive: false });
+  </script>
   <script src="art/portraits.js"></script>
   <script src="client.js"></script>
 </body>

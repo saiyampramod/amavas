@@ -8,6 +8,8 @@ let lastName = localStorage.getItem('nf_name') || '';
 let catalog = null;            // story modes + casts, sent on connect
 let booted = false;            // has the opening screen finished?
 let connected = false, slowWake = false, learnOpen = false, learnMode = null;
+let gate = 'welcome';          // welcome (title) -> join (name + room)
+let ackedIntel = 0, lastRoleSeen = null, sheetOpen = false, ackedHeadline = null;
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +34,7 @@ function connect() {
       if (m.type === 'joined') { myToken = m.token; localStorage.setItem('nf_token', myToken); }
       else if (m.type === 'left') {
         myToken = null; localStorage.removeItem('nf_token');
-        state = null; joinError = ''; render();
+        state = null; joinError = ''; gate = 'welcome'; render();
       }
       else if (m.type === 'error') { joinError = m.text; render(); }
       else if (m.type === 'state') {
@@ -152,6 +154,9 @@ function learnOverlay() {
               <div class="font-headline-md text-[18px] leading-tight ${r.team === 'evil' ? 'text-tertiary-container' : 'text-primary'}">
                 ${esc(r.icon || '')} ${esc(r.name)}</div>
               <p class="font-body-md text-[14px] text-on-surface-variant mt-1">${esc(r.blurb)}</p>
+              ${r.how ? `<details class="mt-2">
+                <summary class="font-label-caps text-[10px] text-primary uppercase tracking-wider cursor-pointer">How to play it</summary>
+                <p class="font-body-md text-[13px] text-text-muted mt-1.5">${esc(r.how)}</p></details>` : ''}
             </div>
           </div>`).join('')}</div>`;
     };
@@ -240,38 +245,61 @@ function learnOverlay() {
   </div>`;
 }
 
+// The title screen: two choices, nothing else.
+function welcomeScreen() {
+  return `<main class="min-h-dvh flex flex-col items-center justify-center px-gutter text-center gap-8 py-12 relative">
+    <div class="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_50%_38%,rgba(255,111,95,.10),transparent_60%)]"></div>
+    <div class="flex flex-col items-center gap-6 boot-fade">
+      <div class="w-36 h-36 rounded-full overflow-hidden boot-moon">${portraitSVG('Rakshasa', { size: 144 })}</div>
+      <div>
+        <h1 class="font-display-lg text-primary tracking-tighter" style="font-size:clamp(48px,17vw,76px);line-height:.95">AMAVAS</h1>
+        <p class="font-label-caps text-label-caps text-text-muted uppercase tracking-[0.42em] mt-3">The moonless night</p>
+      </div>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-[19rem]">
+        A Rakshasa has moved into your society.<br>One of you is lying.</p>
+    </div>
+    <div class="w-full max-w-sm flex flex-col gap-3 boot-fade">
+      ${bigBtn('enter', 'Enter Amavas', 'login')}
+      ${bigBtn('learn', 'Learn the game', 'menu_book', 'ghost')}
+    </div>
+    <p class="font-label-mono text-[11px] text-text-muted tracking-widest uppercase boot-fade">5–20 players · one room</p>
+  </main>`;
+}
+
 function joinScreen() {
   return `<main class="min-h-dvh flex flex-col px-gutter pb-10">
-    <div class="w-full max-w-sm mx-auto pt-5 shrink-0">
-      <button data-act="learn" class="w-full h-12 rounded-xl border border-primary/30 bg-primary/5
-        text-primary font-label-caps text-label-caps uppercase tracking-widest flex items-center justify-center gap-2
-        active:scale-[.98] transition">${ms('menu_book', 'o')} New here? Learn the game</button>
+    <div class="w-full max-w-sm mx-auto pt-4 shrink-0 flex items-center">
+      <button data-act="backToWelcome" class="h-11 px-3 -ml-3 text-on-surface-variant flex items-center gap-1.5
+        font-label-caps text-label-caps uppercase active:scale-95 transition">${ms('arrow_back', 'o')} Back</button>
     </div>
-    <div class="flex-1 flex flex-col items-center justify-center text-center gap-6 py-8">
-    <div class="w-24 h-24 rounded-full overflow-hidden pulse-ring">${portraitSVG('Rakshasa', { size: 96 })}</div>
-    <div>
-      <h1 class="font-display-lg text-display-lg text-primary tracking-tighter">AMAVAS</h1>
-      <p class="font-label-caps text-label-caps text-text-muted uppercase tracking-[0.3em] mt-1">The moonless night</p>
-    </div>
-    <p class="font-body-md text-body-md text-on-surface-variant max-w-xs">
-      A Rakshasa has moved into your society. 5–20 players, one room, one liar you cannot see.</p>
-    <div class="w-full max-w-sm flex flex-col gap-3">
+    <div class="flex-1 flex flex-col justify-center max-w-sm w-full mx-auto gap-6 py-4">
+      <div class="text-center shrink-0">
+        <h2 class="font-headline-lg text-headline-lg text-text-high-contrast">Who's playing?</h2>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-2">
+          Start a table for your group, or join one that's already open.</p>
+      </div>
+
       <input id="nameInput" maxlength="16" autocomplete="off" placeholder="Your name" value="${esc(lastName)}"
-        class="w-full h-14 px-4 rounded-xl bg-surface-container border border-border-subtle text-on-surface
-        font-body-lg text-body-lg placeholder:text-text-muted focus:border-primary/50 focus:ring-0"/>
-      ${bigBtn('create', 'Start a new game', 'add_circle')}
-      <div class="flex items-center gap-3 my-1">
+        class="w-full h-14 shrink-0 px-4 rounded-xl bg-surface-container border border-border-subtle text-on-surface
+        text-center font-body-lg text-body-lg placeholder:text-text-muted focus:border-primary/50 focus:ring-0"/>
+
+      <div class="shrink-0">${bigBtn('create', 'Start a new game', 'add_circle')}</div>
+
+      <div class="flex items-center gap-3 shrink-0">
         <span class="h-px flex-1 bg-border-subtle"></span>
-        <span class="font-label-caps text-label-caps text-text-muted uppercase">or join one</span>
+        <span class="font-label-caps text-label-caps text-text-muted uppercase">or join with a code</span>
         <span class="h-px flex-1 bg-border-subtle"></span>
       </div>
-      <input id="codeInput" maxlength="4" autocomplete="off" placeholder="CODE"
-        class="w-full h-14 px-4 rounded-xl bg-surface-container border border-border-subtle text-on-surface
-        font-label-mono text-[26px] tracking-[0.4em] text-center uppercase placeholder:text-text-muted
-        placeholder:tracking-[0.4em] focus:border-primary/50 focus:ring-0"/>
-      ${bigBtn('join', 'Join that game', 'login', 'ghost')}
-      ${joinError ? `<p class="text-tertiary-container font-label-mono text-label-mono mt-1">${esc(joinError)}</p>` : ''}
-    </div>
+
+      <div class="flex flex-col gap-3 shrink-0">
+        <input id="codeInput" maxlength="4" autocomplete="off" placeholder="────"
+          class="w-full h-16 shrink-0 px-4 rounded-xl bg-surface-container border border-border-subtle text-on-surface
+          font-label-mono text-[30px] tracking-[0.45em] text-center uppercase placeholder:text-border-subtle
+          focus:border-primary/50 focus:ring-0"/>
+        ${bigBtn('join', 'Join that game', 'login', 'ghost')}
+      </div>
+
+      ${joinError ? `<p class="text-tertiary-container font-label-mono text-label-mono text-center shrink-0">${esc(joinError)}</p>` : ''}
     </div>
   </main>`;
 }
@@ -434,6 +462,94 @@ function offerOverlay() {
   </div>`;
 }
 
+// Dawn and dusk get their own beat. Without this the app skips to the next screen
+// and people genuinely miss who died.
+function headlineOverlay() {
+  const h = state.headline;
+  const grim = h.kind === 'death' || h.kind === 'cast-out';
+  const tone = grim ? 'tertiary-container' : 'primary';
+  const icon = h.kind === 'death' ? 'skull' : h.kind === 'cast-out' ? 'gavel'
+    : h.kind === 'spared' ? 'shield' : 'wb_twilight';
+  return `<div class="fixed inset-0 z-[78] bg-background/97 backdrop-blur-xl overflow-y-auto">
+    <div class="min-h-dvh flex flex-col justify-center px-gutter py-10 max-w-lg mx-auto text-center">
+      <div class="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,${grim ? 'rgba(255,111,95,.13)' : 'rgba(152,203,255,.10)'},transparent_62%)]"></div>
+      <div class="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center
+        bg-surface-container border border-${tone}/30 text-${tone} boot-moon">
+        <span class="ms" style="font-size:38px">${icon}</span></div>
+      <span class="font-label-caps text-label-caps text-${tone} uppercase tracking-widest">
+        ${h.kind === 'cast-out' || h.kind === 'spared' ? 'Dusk' : `Dawn · Day ${h.day}`}</span>
+      <h2 class="font-display-lg text-display-lg text-text-high-contrast mt-3 leading-tight">${esc(h.title)}</h2>
+      <p class="font-body-lg text-body-lg text-on-surface-variant mt-4">${esc(h.body)}</p>
+      <div class="mt-9">${bigBtn('ackHeadline', h.kind === 'death' || h.kind === 'cast-out' ? 'Who did this?' : 'Carry on', 'arrow_forward', 'primary')}</div>
+    </div>
+  </div>`;
+}
+
+// Anything new your role has learned, shown once, in your face — not buried in a list.
+function intelOverlay() {
+  const items = state.you.inbox.slice(ackedIntel);
+  return `<div class="fixed inset-0 z-[75] bg-background/97 backdrop-blur-xl overflow-y-auto scanlines">
+    <div class="min-h-dvh flex flex-col justify-center px-gutter py-10 max-w-lg mx-auto text-center">
+      <div class="w-24 h-24 rounded-full mx-auto mb-6 overflow-hidden boot-moon">
+        ${state.you.role ? portraitSVG(state.you.role, { size: 96 }) : ''}</div>
+      <span class="font-label-caps text-label-caps text-primary uppercase tracking-widest">Only you can see this</span>
+      <h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-3">
+        ${items.length > 1 ? 'You learned some things' : 'You learned something'}</h2>
+      <div class="flex flex-col gap-3 mt-7">${items.map(m => `
+        <div class="glass-panel rounded-xl border border-primary/30 p-5">
+          <div class="font-label-mono text-[11px] text-text-muted uppercase tracking-wider">Night ${m.day + 1}</div>
+          <p class="font-body-lg text-body-lg text-on-surface mt-2">${esc(m.text)}</p>
+        </div>`).join('')}</div>
+      <p class="font-body-md text-[13.5px] text-text-muted mt-6">
+        Some roles are fed lies and never find out. Say it out loud, or sit on it.</p>
+      <div class="mt-6">${bigBtn('ackIntel', 'Keep it to myself', 'lock', 'primary')}</div>
+    </div>
+  </div>`;
+}
+
+// The full cast of the story mode in play — everyone may read this, it is not a secret.
+function sheetOverlayScript() {
+  const sc = state.script || {};
+  const roles = (catalog || []).find(m => m.id === state.scriptId);
+  const list = roles ? roles.roles : [];
+  const group = (label, kind, note) => {
+    const rs = list.filter(r => r.kind === kind);
+    if (!rs.length) return '';
+    return `<h4 class="font-label-caps text-label-caps text-text-muted uppercase mt-6 mb-1">${label}</h4>
+      <p class="font-body-md text-[13px] text-text-muted mb-3">${note}</p>
+      <div class="flex flex-col gap-stack-gap">${rs.map(r => `
+        <div class="glass-panel rounded-xl border border-border-subtle p-3 flex items-start gap-3">
+          <div class="w-11 h-11 rounded-full overflow-hidden shrink-0">${portraitSVG(r.name, { size: 44 })}</div>
+          <div class="min-w-0">
+            <div class="font-headline-md text-[17px] leading-tight ${r.team === 'evil' ? 'text-tertiary-container' : 'text-primary'}">
+              ${esc(r.icon || '')} ${esc(r.name)}</div>
+            <p class="font-body-md text-[13.5px] text-on-surface-variant mt-1">${esc(r.blurb)}</p>
+            ${r.how ? `<details class="mt-2">
+              <summary class="font-label-caps text-[10px] text-primary uppercase tracking-wider cursor-pointer">How to play it</summary>
+              <p class="font-body-md text-[13px] text-text-muted mt-1.5">${esc(r.how)}</p></details>` : ''}
+          </div>
+        </div>`).join('')}</div>`;
+  };
+  return `<div class="fixed inset-0 z-[70] bg-background/97 backdrop-blur-xl overflow-y-auto">
+    <header class="sticky top-0 h-16 px-margin-sm flex justify-between items-center bg-surface/90 backdrop-blur-xl border-b border-white/10">
+      <div class="min-w-0">
+        <h2 class="font-headline-md text-headline-md text-primary tracking-tighter truncate">${esc(sc.name || '')}</h2>
+        <p class="font-label-mono text-[10px] text-text-muted uppercase tracking-widest">Character sheet</p>
+      </div>
+      <button data-act="closeSheetScript" class="p-2 -mr-2 text-on-surface-variant shrink-0">${ms('close', 'o')}</button>
+    </header>
+    <div class="px-gutter pb-12 max-w-lg mx-auto">
+      <p class="font-body-md text-[14.5px] text-on-surface-variant mt-4">
+        Every role that <b class="text-on-surface">could</b> be in this game. Not all of them are —
+        that is the whole problem. Claiming one of these is free; proving it is not.</p>
+      ${group('Residents', 'villager', 'Good.')}
+      ${group('Outsiders', 'outsider', 'Good, and a liability.')}
+      ${group('Minions', 'minion', 'Evil, and they know each other.')}
+      ${group('The demon', 'demon', 'Kill it and good wins.')}
+    </div>
+  </div>`;
+}
+
 function decisionOverlay() {
   const d = state.decision;
   return `<div class="fixed inset-0 z-[70] bg-background/95 backdrop-blur-xl overflow-y-auto">
@@ -581,21 +697,21 @@ function nightScreen() {
       <div class="absolute inset-2 rounded-full border border-dashed border-primary/30 animate-[spin_18s_linear_infinite_reverse]"></div>
       <div class="w-32 h-32 rounded-full glass-panel border border-border-subtle flex flex-col items-center justify-center pulse-ring">
         ${ms('bedtime')}
-        <div class="font-label-mono text-label-mono text-text-high-contrast mt-2">${state.waitingOn} acting</div>
+        <div class="font-label-mono text-label-mono text-text-high-contrast mt-2">${state.waitingOn} left</div>
       </div>
     </div>
-    <div class="w-full glass-panel rounded-xl border border-border-subtle p-4">
-      <div class="flex justify-between items-center mb-3">
-        <span class="font-label-caps text-label-caps text-text-muted uppercase">Current status</span>
-        <span class="font-label-mono text-label-mono text-tertiary-container">${state.waitingOn} still acting</span>
-      </div>
-      <div class="flex flex-col gap-2">${Array.from({ length: Math.max(1, state.waitingOn) }, (_, i) =>
-        `<div class="h-10 rounded-lg bg-surface-container border border-border-subtle flex items-center px-3 shimmer">
-          <div class="w-6 h-6 rounded bg-primary/20 mr-3"></div>
-          <div class="h-2 rounded bg-on-surface-variant/25" style="width:${30 + (i * 17) % 40}%"></div></div>`).join('')}</div>
-    </div>
+    ${state.yourChoice ? `<div class="w-full glass-panel rounded-xl border border-primary/30 p-4">
+        <p class="font-label-caps text-label-caps text-primary uppercase">You chose</p>
+        <p class="font-headline-md text-headline-md text-text-high-contrast mt-1">
+          ${esc(state.yourVerb || '')} ${esc(state.yourChoice)}</p>
+        <p class="font-body-md text-[13.5px] text-text-muted mt-2">
+          If that does anything, you will find out before dawn.</p>
+      </div>`
+      : `<div class="w-full glass-panel rounded-xl border border-border-subtle p-4">
+        <p class="font-label-mono text-label-mono text-text-muted">Waiting on ${state.waitingOn} other player(s).</p>
+      </div>`}
   </main>
-  ${actionBar(bigBtn('', 'Waiting for resolution', 'lock', 'ghost', true))}`;
+  ${actionBar(bigBtn('', 'Waiting for the others', 'lock', 'ghost', true))}`;
 }
 
 function voteScreen() {
@@ -651,12 +767,21 @@ function dayScreen() {
   const ghost = !you.alive;
   return `${topBar()}
   <main class="pt-24 pb-safe-bottom px-gutter max-w-lg mx-auto fade-up">
-    ${ghost ? ghostHero() : `<header class="text-center mb-6">
+    ${ghost ? ghostHero() : `<header class="text-center mb-5">
       ${chip('Day ' + state.dayNum, 'mute')}
       <h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-4">Society Meeting</h2>
       <p class="font-body-md text-body-md text-on-surface-variant mt-2">
         Talk it out loud, face to face. Then accuse and vote here.</p>
     </header>`}
+    ${state.headline ? `<div class="glass-panel rounded-xl border p-4 mb-5 flex items-center gap-3
+        ${state.headline.kind === 'death' ? 'border-tertiary-container/35' : 'border-border-subtle'}">
+        <span class="ms shrink-0 ${state.headline.kind === 'death' ? 'text-tertiary-container' : 'text-text-muted'}"
+          style="font-size:26px">${state.headline.kind === 'death' ? 'skull' : 'wb_twilight'}</span>
+        <div class="min-w-0">
+          <p class="font-label-caps text-label-caps text-text-muted uppercase">Last night</p>
+          <p class="font-headline-md text-[18px] text-text-high-contrast leading-tight">${esc(state.headline.title)}</p>
+        </div>
+      </div>` : ''}
     ${state.onBlock ? `<div class="glass-panel rounded-xl border border-tertiary-container/40 p-4 mb-6 text-center">
         <p class="font-label-caps text-label-caps text-tertiary-container uppercase">On the block</p>
         <p class="font-headline-md text-headline-md text-text-high-contrast mt-1">${esc(state.onBlock)}</p>
@@ -771,12 +896,16 @@ function roleOverlay() {
     </div>
     <div id="revealArea" class="relative w-full max-w-sm mx-auto flex-1 max-h-[560px] rounded-3xl overflow-hidden
       border border-border-subtle bg-surface-container-low scanlines">
-      <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-6 gap-4">
-        <div class="w-36 h-36 rounded-full overflow-hidden">${portraitSVG(you.role, { size: 144 })}</div>
+      <div class="absolute inset-0 overflow-y-auto flex flex-col items-center justify-center text-center px-6 py-8 gap-3">
+        <div class="w-28 h-28 rounded-full overflow-hidden shrink-0">${portraitSVG(you.role, { size: 112 })}</div>
         <h3 class="font-headline-lg text-headline-lg text-${tone} tracking-tight">${esc(you.role)}</h3>
-        <div class="px-3 py-1 rounded-full bg-${tone}/10 border border-${tone}/20">
+        <div class="px-3 py-1 rounded-full bg-${tone}/10 border border-${tone}/20 shrink-0">
           <span class="font-label-caps text-label-caps text-${tone} uppercase">${evil ? 'Evil' : 'Good'}</span></div>
-        <p class="font-body-md text-body-md text-on-surface-variant">${esc(you.blurb || '')}</p>
+        <p class="font-body-md text-body-md text-on-surface">${esc(you.blurb || '')}</p>
+        ${you.how ? `<div class="w-full mt-1 pt-3 border-t border-border-subtle text-left">
+          <p class="font-label-caps text-[10px] text-primary uppercase tracking-wider mb-1.5">How to play it</p>
+          <p class="font-body-md text-[13.5px] text-on-surface-variant">${esc(you.how)}</p>
+        </div>` : ''}
       </div>
       <div class="veil absolute inset-0 z-10 flex flex-col items-center justify-center"
         style="background:radial-gradient(circle at center, rgba(30,31,38,.85) 0%, rgba(17,19,25,1) 100%)">
@@ -812,6 +941,7 @@ function drawerOverlay() {
           <button data-act="leave" class="px-4 py-2.5 rounded-xl border border-tertiary-container/40
             text-tertiary-container font-label-caps text-label-caps uppercase shrink-0">Leave</button>
         </div>
+        <div class="mt-3">${bigBtn('openSheet', 'Character sheet for this story', 'menu_book', 'ghost')}</div>
       </section>
       <section>
         <h3 class="font-label-caps text-label-caps text-primary uppercase mb-3 flex items-center gap-2">
@@ -868,19 +998,27 @@ function render() {
   if (!booted) { app().innerHTML = bootScreen(); overlay().innerHTML = ''; return; }
   if (!state || !state.you) {
     roleOpen = drawer = false; sheet = null;
-    app().innerHTML = joinScreen();
+    app().innerHTML = gate === 'welcome' ? welcomeScreen() : joinScreen();
     overlay().innerHTML = learnOpen ? learnOverlay() : '';
     wire(); return;
   }
   const s = state.phase;
   const st = state.you.storyteller;
+  // a fresh role means a fresh game — let its first secrets pop
+  if (state.you.role !== lastRoleSeen) { lastRoleSeen = state.you.role; ackedIntel = 0; }
+  const inbox = state.you.inbox || [];
+  const newIntel = !st && inbox.length > ackedIntel;
   app().innerHTML = s === 'lobby' ? lobbyScreen()
     : st ? stScreen()
     : s === 'night' ? nightScreen()
     : s === 'day' ? dayScreen()
     : s === 'over' ? overScreen() : '';
+  const newHeadline = state.headline && state.headline.id !== ackedHeadline && state.phase !== 'over';
   overlay().innerHTML = state.offer ? offerOverlay()
     : state.decision ? decisionOverlay()
+    : newHeadline ? headlineOverlay()
+    : newIntel ? intelOverlay()
+    : sheetOpen ? sheetOverlayScript()
     : whisperTo ? whisperOverlay()
     : sheetScript ? rolesOverlay()
     : roleOpen ? roleOverlay() : drawer ? drawerOverlay() : sheet ? sheetOverlay() : '';
@@ -944,7 +1082,13 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   const a = btn.dataset.act;
-  if (a === 'learn') { learnOpen = true; learnMode = null; render(); }
+  if (a === 'ackHeadline') { ackedHeadline = state.headline && state.headline.id; render(); }
+  else if (a === 'ackIntel') { ackedIntel = (state.you.inbox || []).length; render(); }
+  else if (a === 'openSheet') { sheetOpen = true; drawer = false; render(); }
+  else if (a === 'closeSheetScript') { sheetOpen = false; render(); }
+  else if (a === 'enter') { gate = 'join'; joinError = ''; render(); }
+  else if (a === 'backToWelcome') { gate = 'welcome'; joinError = ''; render(); }
+  else if (a === 'learn') { learnOpen = true; learnMode = null; render(); }
   else if (a === 'closeLearn') { learnOpen = false; learnMode = null; render(); }
   else if (a === 'learnBack') { learnMode = null; render(); }
   else if (a === 'join') doJoin(false);
@@ -1035,6 +1179,8 @@ function maybeFinishBoot() {
   render();
 }
 let bootMinElapsed = false, fontsReady = false;
+// an invite link goes straight to the join step — they already know where they're going
+if (new URLSearchParams(location.search).get('room')) gate = 'join';
 setTimeout(() => { bootMinElapsed = true; maybeFinishBoot(); }, 1500);
 (document.fonts ? document.fonts.ready : Promise.resolve())
   .then(() => { fontsReady = true; maybeFinishBoot(); });

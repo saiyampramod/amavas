@@ -56,13 +56,17 @@ function createRoom() {
 function useRoom(g) { game = g; return g; }
 
 // Drop rooms nobody is connected to, so a long-lived server doesn't accumulate them.
+// Seats are kept while a game is running so people can reconnect, which means an
+// abandoned game holds its players until this clears it.
+const ROOM_TTL = Number(process.env.ROOM_TTL_MS || 20 * 60 * 1000);
 function sweepRooms() {
+  const now = Date.now();
   for (const [code, g] of rooms) {
     const live = g.players.some(p => p.ws && p.ws.readyState === 1);
-    if (!live && Date.now() - (g.lastSeen || g.createdAt || 0) > 30 * 60 * 1000) rooms.delete(code);
+    if (!live && now - (g.lastSeen || g.createdAt || 0) > ROOM_TTL) rooms.delete(code);
   }
 }
-setInterval(sweepRooms, 5 * 60 * 1000).unref();
+setInterval(sweepRooms, Math.min(ROOM_TTL, 2 * 60 * 1000)).unref();
 
 function freshGame() {
   return {
@@ -78,6 +82,7 @@ function freshGame() {
     directorSaves: 0,       // game-ending night kills it has turned aside
     pendingOffer: null,     // a defection only its recipient can see
     defectionOffered: false,
+    headline: null,         // the last big beat — dawn deaths, dusk executions
     dayNum: 0,
     players: [],
     log: [],
@@ -103,6 +108,12 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
 function log(text) { game.log.push({ day: game.dayNum, phase: game.phase, text }); }
+
+// A death or an execution deserves its own beat. Without one the app skips straight to
+// the next screen and players genuinely miss who died.
+function headline(kind, title, body) {
+  game.headline = { id: crypto.randomUUID(), kind, title, body, day: game.dayNum };
+}
 
 // ---------------------------------------------------------------- messaging
 function send(p, msg) { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); }
@@ -136,7 +147,8 @@ function scriptCatalogue() {
     id, name: sc.name, tag: sc.tag, blurb: sc.blurb, difficulty: sc.difficulty,
     demon: sc.demon, demonIcon: ROLES[sc.demon].icon,
     roles: [...sc.villagers, FILLER, ...sc.outsiders, ...sc.minions, sc.demon]
-      .map(r => ({ name: r, icon: ROLES[r].icon, team: ROLES[r].team, kind: ROLES[r].kind, blurb: ROLES[r].blurb })),
+      .map(r => ({ name: r, icon: ROLES[r].icon, team: ROLES[r].team, kind: ROLES[r].kind,
+        blurb: ROLES[r].blurb, how: ROLES[r].how })),
   }));
 }
 
@@ -151,6 +163,8 @@ function stateFor(p) {
       id: p.id, name: p.name, alive: p.alive, ghostVote: p.ghostVote, host: p.host,
       storyteller: !!p.storyteller,
       role: p.shownRole, blurb: p.shownRole ? ROLES[p.shownRole].blurb : null,
+      // deliberately the SHOWN role's advice — an Old Monk must read as their fake role
+      how: p.shownRole ? ROLES[p.shownRole].how : null,
       icon: p.shownRole ? ROLES[p.shownRole].icon : null,
       team: p.role ? (ROLES[p.role].team === 'evil' ? 'evil' : 'good') : null,
       inbox: p.inbox,
@@ -162,6 +176,7 @@ function stateFor(p) {
     scriptId: game.scriptId,
     script: { id: game.scriptId, ...scriptOf() },
     code: game.code,
+    headline: game.headline,
     storyteller: theST() ? { id: theST().id, name: theST().name } : null,
     mode: theST() ? 'storyteller' : 'host',
     director: game.director,
@@ -193,6 +208,9 @@ function stateFor(p) {
     s.needsAction = game.nightNeeded.includes(p.id) && !(p.id in game.nightActions);
     s.actionPrompt = p.nightPrompt || null;
     s.waitingOn = game.nightNeeded.filter(id => !(id in game.nightActions)).length;
+    const chose = game.nightActions[p.id];
+    s.yourChoice = chose ? (byId(chose) || {}).name : null;
+    s.yourVerb = p.nightPrompt ? p.nightPrompt.verb : null;
   }
   if (game.phase === 'day') {
     s.onBlock = game.onBlock ? byId(game.onBlock).name : null;
@@ -453,6 +471,23 @@ function nightPromptFor(p) {
   return null;
 }
 
+// Everyone is asked to do something at night, whether or not it does anything.
+// If only the powerful got a prompt, anyone glancing at your phone would learn what
+// you are — and the "3 still acting" counter would quietly leak how many powers are live.
+const IDLE_PROMPTS = [
+  { verb: 'Watch', text: 'Sleep is not coming. Choose someone to lie awake thinking about.' },
+  { verb: 'Listen', text: 'You hear movement outside. Choose whose door you think it stopped at.' },
+  { verb: 'Dream', text: 'You dream of the society. Choose whose face surfaces in it.' },
+  { verb: 'Suspect', text: 'Choose the person you would least like to be alone with tonight.' },
+];
+
+function idlePromptFor(p) {
+  const targets = alive().filter(q => q !== p);
+  if (!targets.length) return null;
+  const pick_ = IDLE_PROMPTS[(p.seat + game.dayNum) % IDLE_PROMPTS.length];
+  return { verb: pick_.verb, text: pick_.text, targets, decoy: true };
+}
+
 function startNight() {
   game.phase = 'night';
   game.nightActions = {};
@@ -460,9 +495,15 @@ function startNight() {
   for (const p of seated()) {
     p.protected = false;
     p.nightPrompt = null;
-    const prompt = nightPromptFor(p);
+    if (!p.alive) continue;
+    const real = nightPromptFor(p);
+    const prompt = real || idlePromptFor(p);
     if (prompt) {
-      p.nightPrompt = { verb: prompt.verb, text: prompt.text, targets: prompt.targets.map(t => ({ id: t.id, name: t.name })) };
+      p.nightDecoy = !real;
+      p.nightPrompt = {
+        verb: prompt.verb, text: prompt.text,
+        targets: prompt.targets.map(t => ({ id: t.id, name: t.name })),
+      };
       game.nightNeeded.push(p.id);
     }
   }
@@ -786,9 +827,17 @@ async function runNight() {
   game.onBlock = null; game.onBlockVotes = 0; game.nomination = null;
   game.todayYesVoters = [];
   for (const p of seated()) { p.nominatedToday = false; p.wasNominatedToday = false; }
-  if (deaths.length > 1) log(`Dawn, Day ${game.dayNum}. ${deaths.map(d => d.name).join(' and ')} were found dead. The society is in open panic.`);
-  else if (death) log(`Dawn, Day ${game.dayNum}. ${death.name} was found dead. An emergency society meeting is called.`);
-  else log(`Dawn, Day ${game.dayNum}. By some miracle, nobody died. The society meeting gathers.`);
+  if (deaths.length > 1) {
+    const names = deaths.map(d => d.name).join(' and ');
+    log(`Dawn, Day ${game.dayNum}. ${names} were found dead. The society is in open panic.`);
+    headline('death', `${names} are dead`, 'Two of you did not wake up. Whatever is in this society is not being careful any more.');
+  } else if (death) {
+    log(`Dawn, Day ${game.dayNum}. ${death.name} was found dead. An emergency society meeting is called.`);
+    headline('death', `${death.name} is dead`, 'Found in the night. Nobody heard a thing — or nobody is saying so.');
+  } else {
+    log(`Dawn, Day ${game.dayNum}. By some miracle, nobody died. The society meeting gathers.`);
+    headline('quiet', 'Nobody died last night', 'Everyone is still here. Somebody was protected, or something chose not to feed.');
+  }
   if (game.pehelwanReveal) {
     log(`The Pehelwan went down fighting and dragged someone into the light: ${game.pehelwanReveal} is EVIL.`);
     game.pehelwanReveal = null;
@@ -885,12 +934,14 @@ function endDay(p) {
     if (blocked.role === 'Netaji' && !blocked.executionSurvived && !blocked.poisoned) {
       blocked.executionSurvived = true;
       log(`Dusk. The society votes ${blocked.name} out — and somehow, by morning, the paperwork is lost. They stay.`);
+      headline('spared', `${blocked.name} stays`, 'The society voted them out. By morning the paperwork had gone missing and nobody can explain it.');
       startNight();
       return;
     }
     blocked.alive = false;
     game.executedToday = blocked;
     log(`Dusk. The society evicts ${blocked.name}. Deposit forfeited. Never to return.`);
+    headline('cast-out', `${blocked.name} is cast out`, `The society voted, ${game.onBlockVotes} hands went up, and their role dies with them.`);
     if (blocked.role === 'Kasai' && !blocked.poisoned) {
       game.doubleKill = true;
       log('Something in the way the butcher smiled on the way out was deeply unsettling.');
@@ -898,6 +949,7 @@ function endDay(p) {
     if (checkWin()) return;
   } else {
     log('Dusk. The society evicts nobody today.');
+    headline('quiet', 'Nobody is cast out', 'The society could not agree, or chose not to. Night falls with everyone still in it.');
     const mayor = seated().find(q => q.role === 'Big Boss' && q.alive && !q.poisoned);
     if (alive().length === 3 && mayor) {
       return gameOver('good', `Only three remained, nobody was cast out, and ${mayor.name} was the Big Boss. The society holds together — GOOD wins!`);
@@ -979,8 +1031,13 @@ function handleMessage(ws, raw) {
           return;
         }
       }
-      // token is stale (server restarted, or the room was swept) — fall through and
-      // let them join fresh rather than stranding them on a blank screen
+      // Token is stale: the server restarted, or the room was reclaimed. Tell the client
+      // to forget it and start over, rather than leaving them on a frozen screen.
+      if (!msg.name) {
+        ws.send(JSON.stringify({ type: 'left' }));
+        ws.send(JSON.stringify({ type: 'error', text: 'That game has finished. Start a new one, or join with a code.' }));
+        return;
+      }
     }
 
     const name = String(msg.name || '').trim().slice(0, 16);
@@ -1018,7 +1075,13 @@ function handleMessage(ws, raw) {
 
   if (!bind) return;
   const room = rooms.get(bind.code);
-  if (!room) return;
+  if (!room) {
+    // the room went away under them — send them back to the front door, don't freeze
+    sockets.delete(ws);
+    ws.send(JSON.stringify({ type: 'left' }));
+    ws.send(JSON.stringify({ type: 'error', text: 'That room is no longer open.' }));
+    return;
+  }
   useRoom(room);
   game.lastSeen = Date.now();
   const p = byId(bind.playerId);
@@ -1111,11 +1174,23 @@ function handleMessage(ws, raw) {
     case 'newGame':
       if (p.host && (game.phase === 'over' || game.phase === 'lobby')) {
         // drop anyone who has disconnected between games
-        const keep = game.players.filter(q => q.ws && q.ws.readyState === 1).map(q => ({ ...q, alive: true, ghostVote: true, role: null, shownRole: null, inbox: [], poisoned: false, hunterUsed: false, nominatedToday: false, wasNominatedToday: false }));
+        const code = game.code;
+        const keep = game.players.filter(q => q.ws && q.ws.readyState === 1).map(q => ({
+          ...q, alive: true, ghostVote: true, role: null, shownRole: null, inbox: [],
+          poisoned: false, stPoisoned: false, hunterUsed: false, nominatedToday: false,
+          wasNominatedToday: false, selfSaveUsed: false, lastWard: null, yesVotes: 0,
+          voteBlockedDay: -1, executionSurvived: false, registerAs: null, aghoriEvil: null,
+          nightPrompt: null, nightDecoy: false,
+        }));
         game = freshGame();
+        game.code = code;
+        game.createdAt = Date.now();
+        game.lastSeen = Date.now();
         game.players = keep;
         game.players.forEach((q, i) => { q.seat = i; });
         if (game.players.length && !game.players.some(q => q.host)) game.players[0].host = true;
+        // the room must point at the NEW game, or every later message lands on the dead one
+        rooms.set(code, game);
         broadcast();
       }
       break;
@@ -1143,7 +1218,14 @@ const server = http.createServer((req, res) => {
   const fp = path.join(__dirname, 'public', path.normalize(file).replace(/^([.][.][/\\])+/, ''));
   fs.readFile(fp, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream' });
+    // Fonts and icons never change under a given name, so cache them hard. The game code
+    // must always be revalidated: after a redeploy a stale client.js on someone's phone
+    // would be talking to a newer server.
+    const longLived = /^\/(vendor\/fonts|icon)/.test(file) || /\.(woff2|woff|ttf|png)$/.test(file);
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
+      'Cache-Control': longLived ? 'public, max-age=31536000, immutable' : 'no-cache',
+    });
     res.end(data);
   });
 });
