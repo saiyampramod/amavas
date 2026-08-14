@@ -19,3 +19,9 @@ st-out.txt
 rolelist.json
 
 .commitmsg
+
+# runtime logs
+*.log
+*.err
+stress-out.txt
+demo-*.log
