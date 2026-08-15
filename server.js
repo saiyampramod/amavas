@@ -117,7 +117,8 @@ function headline(kind, title, body) {
 
 // ---------------------------------------------------------------- messaging
 function send(p, msg) { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); }
-function tell(p, text) { p.inbox.push({ day: game.dayNum, text }); }
+// kind: 'intel' (default) or 'role' — a role change is flagged so the client can mark it
+function tell(p, text, kind) { p.inbox.push({ day: game.dayNum, text, kind: kind || 'intel' }); }
 
 function publicPlayer(p) {
   return { id: p.id, name: p.name, seat: p.seat, alive: p.alive, ghostVote: p.ghostVote,
@@ -298,12 +299,12 @@ function changeRole(t, newRole, note) {
   t.role = newRole;
   t.shownRole = newRole;
   t.selfSaveUsed = false; t.lastWard = null; t.hunterUsed = false;
-  tell(t, note || `Something has shifted. You are now the ${newRole}.`);
+  tell(t, note || `Something has shifted. You are now the ${newRole}.`, 'role');
   directorNote(`${t.name}: ${was} → ${newRole}.`);
   if (ROLES[newRole].team === 'evil') {
     const mates = seated().filter(q => q !== t && q.alive && ROLES[q.role].team === 'evil');
-    if (mates.length) tell(t, `Your evil saath: ${mates.map(q => `${q.name} (${q.role})`).join(', ')}.`);
-    for (const m of mates) tell(m, `${t.name} is with you now.`);
+    if (mates.length) tell(t, `Your evil saath: ${mates.map(q => `${q.name} (${q.role})`).join(', ')}.`, 'role');
+    for (const m of mates) tell(m, `${t.name} is with you now.`, 'role');
   }
   return true;
 }
@@ -1296,7 +1297,9 @@ const server = http.createServer((req, res) => {
     const longLived = /^\/(vendor\/fonts|icon)/.test(file) || /\.(woff2|woff|ttf|png)$/.test(file);
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
-      'Cache-Control': longLived ? 'public, max-age=31536000, immutable' : 'no-cache',
+      // no-store, not no-cache: phones were holding on to old copies of the game code
+      // after a redeploy and running it against a newer server.
+      'Cache-Control': longLived ? 'public, max-age=31536000, immutable' : 'no-store, max-age=0',
     });
     res.end(data);
   });

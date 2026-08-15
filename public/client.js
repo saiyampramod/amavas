@@ -10,7 +10,42 @@ let booted = false;            // has the opening screen finished?
 let connected = false, slowWake = false, learnOpen = false, learnMode = null;
 let gate = 'welcome';          // welcome (title) -> join (name + room)
 let ackedIntel = 0, lastRoleSeen = null, sheetOpen = false, ackedHeadline = null;
-let confirmLeave = false;
+// Two ways to see your role: hold the card for a glance, or tap Show to keep it up.
+// `roleShown` is the sticky one, `peeking` is the transient hold. The earlier hold-only
+// version broke because the reveal lived as a class on an element that any incoming game
+// update replaced — so now the class is derived from state, applied directly for
+// instant feedback, and released from the document so a hold can never get stuck on.
+let confirmLeave = false, roleShown = false, peeking = false;
+let unreadRecords = false, seenIntel = 0;
+
+const roleVisible = () => roleShown || peeking;
+function paintReveal() {
+  const area = document.getElementById('revealArea');
+  if (area) area.classList.toggle('revealing', roleVisible());
+}
+function setPeek(on) {
+  if (peeking === on) return;
+  peeking = on;
+  paintReveal();
+}
+const peekStart = e => {
+  const card = e.target.closest && e.target.closest('[data-peek]');
+  if (!card || roleShown) return;          // already up: let them scroll it instead
+  e.preventDefault();
+  setPeek(true);
+};
+const peekEnd = () => setPeek(false);
+document.addEventListener('pointerdown', peekStart, { passive: false });
+document.addEventListener('pointerup', peekEnd);
+document.addEventListener('pointercancel', peekEnd);
+document.addEventListener('touchstart', peekStart, { passive: false });   // fallback
+document.addEventListener('touchend', peekEnd);
+document.addEventListener('touchcancel', peekEnd);
+document.addEventListener('mouseup', peekEnd);
+window.addEventListener('blur', peekEnd);
+document.addEventListener('contextmenu', e => {
+  if (e.target.closest && e.target.closest('[data-peek]')) e.preventDefault();
+});
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -67,7 +102,11 @@ function connect() {
 function topBar() {
   return `<header class="fixed top-0 w-full z-40 h-16 px-margin-sm flex justify-between items-center
       bg-surface/80 backdrop-blur-xl border-b border-white/10">
-    <button data-act="drawer" class="p-2 -ml-2 text-on-surface-variant active:scale-95 transition">${ms('receipt_long', 'o')}</button>
+    <button data-act="drawer" class="relative p-2 -ml-2 text-on-surface-variant active:scale-95 transition">
+      ${ms('receipt_long', 'o')}
+      ${unreadRecords ? `<span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-tertiary-container
+        border-2 border-surface animate-pulse"></span>` : ''}
+    </button>
     <div class="text-center leading-none">
       <h1 class="font-headline-md text-headline-md tracking-tighter text-primary uppercase">Amavas</h1>
       ${state.code ? `<span class="font-label-mono text-[10px] text-text-muted tracking-[0.25em]">${esc(state.code)}</span>` : ''}
@@ -512,11 +551,14 @@ function intelOverlay() {
       <span class="font-label-caps text-label-caps text-primary uppercase tracking-widest">Only you can see this</span>
       <h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-3">
         ${items.length > 1 ? 'You learned some things' : 'You learned something'}</h2>
-      <div class="flex flex-col gap-3 mt-7">${items.map(m => `
-        <div class="glass-panel rounded-xl border border-primary/30 p-5">
-          <div class="font-label-mono text-[11px] text-text-muted uppercase tracking-wider">Night ${m.day + 1}</div>
+      <div class="flex flex-col gap-3 mt-7">${items.map(m => {
+        const isRole = m.kind === 'role';
+        return `<div class="glass-panel rounded-xl border p-5 ${isRole ? 'border-tertiary-container/50' : 'border-primary/30'}">
+          <div class="font-label-mono text-[11px] uppercase tracking-wider ${isRole ? 'text-tertiary-container' : 'text-text-muted'}">
+            ${isRole ? 'Your role has changed' : 'Night ' + (m.day + 1)}</div>
           <p class="font-body-lg text-body-lg text-on-surface mt-2">${esc(m.text)}</p>
-        </div>`).join('')}</div>
+        </div>`;
+      }).join('')}</div>
       <p class="font-body-md text-[13.5px] text-text-muted mt-6">
         Some roles are fed lies and never find out. Say it out loud, or sit on it.</p>
       <div class="mt-6">${bigBtn('ackIntel', 'Keep it to myself', 'lock', 'primary')}</div>
@@ -925,35 +967,48 @@ function roleOverlay() {
   if (!you.role) return '';
   const evil = you.team === 'evil';
   const tone = evil ? 'tertiary-container' : 'primary';
-  return `<div class="fixed inset-0 z-[60] bg-background/95 backdrop-blur-xl flex flex-col px-gutter pt-20 pb-8">
-    <button data-act="closeRole" class="absolute top-5 right-5 p-2 text-on-surface-variant">${ms('close', 'o')}</button>
-    <div class="text-center mb-6">
-      <h2 class="font-headline-lg text-headline-lg text-text-high-contrast">Your Role</h2>
-      <p class="font-body-md text-body-md text-on-surface-variant mt-1">Hold the seal to reveal. Nobody should see this.</p>
-    </div>
-    <div id="revealArea" class="relative w-full max-w-sm mx-auto flex-1 max-h-[560px] rounded-3xl overflow-hidden
-      border border-border-subtle bg-surface-container-low scanlines">
-      <div class="absolute inset-0 overflow-y-auto flex flex-col items-center justify-center text-center px-6 py-8 gap-3">
-        <div class="w-28 h-28 rounded-full overflow-hidden shrink-0">${portraitSVG(you.role, { size: 112 })}</div>
-        <h3 class="font-headline-lg text-headline-lg text-${tone} tracking-tight">${esc(you.role)}</h3>
-        <div class="px-3 py-1 rounded-full bg-${tone}/10 border border-${tone}/20 shrink-0">
-          <span class="font-label-caps text-label-caps text-${tone} uppercase">${evil ? 'Evil' : 'Good'}</span></div>
-        <p class="font-body-md text-body-md text-on-surface">${esc(you.blurb || '')}</p>
-        ${you.how ? `<div class="w-full mt-1 pt-3 border-t border-border-subtle text-left">
-          <p class="font-label-caps text-[10px] text-primary uppercase tracking-wider mb-1.5">How to play it</p>
-          <p class="font-body-md text-[13.5px] text-on-surface-variant">${esc(you.how)}</p>
+  // Everything must fit one screen — nobody should be scrolling to read their own role.
+  return `<div class="fixed inset-0 z-[60] bg-background/95 backdrop-blur-xl flex flex-col
+      px-gutter pt-12 pb-5 overflow-hidden">
+    <button data-act="closeRole" class="absolute top-3 right-3 p-2 text-on-surface-variant z-20">${ms('close', 'o')}</button>
+    <p class="text-center font-label-caps text-label-caps text-text-muted uppercase tracking-[0.25em] mb-2 shrink-0">
+      ${roleShown ? 'Hide it before you put the phone down' : 'Hold the card, or tap Show'}</p>
+    <div id="revealArea" data-peek="1"
+      class="relative w-full max-w-sm mx-auto flex-1 min-h-0 rounded-3xl overflow-hidden
+      border border-border-subtle bg-surface-container-low scanlines${roleVisible() ? ' revealing' : ''}
+      ${roleShown ? '' : 'select-none'}"
+      style="touch-action:${roleShown ? 'pan-y' : 'none'};-webkit-touch-callout:none">
+      <div class="absolute inset-0 flex flex-col px-5 py-4 gap-2">
+        <div class="shrink-0 flex flex-col items-center text-center gap-2">
+          <div class="w-20 h-20 rounded-full overflow-hidden">${portraitSVG(you.role, { size: 80 })}</div>
+          <h3 class="font-headline-lg text-[27px] leading-none text-${tone} tracking-tight">${esc(you.role)}</h3>
+          <div class="px-3 py-0.5 rounded-full bg-${tone}/10 border border-${tone}/20">
+            <span class="font-label-caps text-label-caps text-${tone} uppercase">${evil ? 'Evil' : 'Good'}</span></div>
+          <p class="font-body-md text-[14.5px] leading-snug text-on-surface">${esc(you.blurb || '')}</p>
+        </div>
+        ${you.how ? `<div class="flex-1 min-h-0 overflow-y-auto pt-2 mt-1 border-t border-border-subtle text-left"
+            style="touch-action:pan-y">
+          <p class="font-label-caps text-[10px] text-primary uppercase tracking-wider mb-1">How to play it</p>
+          <p class="font-body-md text-[12.5px] leading-snug text-on-surface-variant">${esc(you.how)}</p>
         </div>` : ''}
       </div>
-      <div class="veil absolute inset-0 z-10 flex flex-col items-center justify-center"
+      <div class="veil absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center"
         style="background:radial-gradient(circle at center, rgba(30,31,38,.85) 0%, rgba(17,19,25,1) 100%)">
         <div class="relative w-24 h-24 flex items-center justify-center">
           <div class="absolute inset-0 rounded-full border-2 border-primary/20 pulse-ring"></div>
           <div class="absolute inset-0 rounded-full border border-primary/40 border-t-transparent animate-[spin_4s_linear_infinite]"></div>
-          <button id="peekBtn" class="w-16 h-16 rounded-full bg-surface-container border border-border-subtle
-            flex items-center justify-center touch-none">${ms('fingerprint', 'o')}</button>
+          <div class="w-16 h-16 rounded-full bg-surface-container border border-border-subtle
+            flex items-center justify-center text-primary">${ms('fingerprint', 'o')}</div>
         </div>
-        <p class="font-label-mono text-label-mono text-on-surface-variant mt-5 select-none">PRESS &amp; HOLD</p>
+        <p class="font-label-mono text-label-mono text-on-surface-variant mt-5">HOLD TO PEEK</p>
+        <p class="font-body-md text-[13.5px] text-text-muted mt-2">
+          Press anywhere on this card and hold. Check nobody is reading over your shoulder.</p>
       </div>
+    </div>
+    <div class="w-full max-w-sm mx-auto mt-3 shrink-0">
+      ${roleShown
+        ? bigBtn('toggleRole', 'Hide my role', 'visibility_off', 'ghost')
+        : bigBtn('toggleRole', 'Show my role', 'visibility', 'primary')}
     </div>
   </div>`;
 }
@@ -983,10 +1038,13 @@ function drawerOverlay() {
       <section>
         <h3 class="font-label-caps text-label-caps text-primary uppercase mb-3 flex items-center gap-2">
           ${ms('lock', 'o')} Your secret intel</h3>
-        ${inbox.length ? `<div class="flex flex-col gap-2">${inbox.map(m =>
-          `<div class="glass-panel rounded-xl border-l-2 border-primary p-3">
-            <div class="font-label-mono text-[11px] text-text-muted uppercase">Night ${m.day + 1}</div>
-            <div class="font-body-md text-body-md text-on-surface mt-1">${esc(m.text)}</div></div>`).join('')}</div>`
+        ${inbox.length ? `<div class="flex flex-col gap-2">${inbox.map(m => {
+          const isRole = m.kind === 'role';
+          return `<div class="glass-panel rounded-xl border-l-2 p-3 ${isRole ? 'border-tertiary-container bg-tertiary-container/5' : 'border-primary'}">
+            <div class="font-label-mono text-[11px] uppercase flex items-center gap-1.5 ${isRole ? 'text-tertiary-container' : 'text-text-muted'}">
+              ${isRole ? ms('swap_horiz', 'o') + ' Your role changed' : 'Night ' + (m.day + 1)}</div>
+            <div class="font-body-md text-body-md text-on-surface mt-1">${esc(m.text)}</div></div>`;
+        }).join('')}</div>`
           : `<p class="font-label-mono text-label-mono text-text-muted">Nothing yet. Your role may have no night intel.</p>`}
       </section>
       <section>
@@ -1042,9 +1100,13 @@ function render() {
   const s = state.phase;
   const st = state.you.storyteller;
   // a fresh role means a fresh game — let its first secrets pop
-  if (state.you.role !== lastRoleSeen) { lastRoleSeen = state.you.role; ackedIntel = 0; }
+  if (state.you.role !== lastRoleSeen) {
+    lastRoleSeen = state.you.role; ackedIntel = 0; seenIntel = 0; unreadRecords = false;
+  }
   const inbox = state.you.inbox || [];
   const newIntel = !st && inbox.length > ackedIntel;
+  // anything new stays flagged on the Records button until they actually open it
+  if (inbox.length > seenIntel) { seenIntel = inbox.length; unreadRecords = true; }
   app().innerHTML = s === 'lobby' ? lobbyScreen()
     : st ? stScreen()
     : s === 'night' ? nightScreen()
@@ -1060,21 +1122,13 @@ function render() {
     : whisperTo ? whisperOverlay()
     : sheetScript ? rolesOverlay()
     : roleOpen ? roleOverlay() : drawer ? drawerOverlay() : sheet ? sheetOverlay() : '';
+  // A full-screen overlay is fixed, but the page behind it can still scroll on iOS,
+  // which reads as the card sliding around under your thumb. Freeze it while one is open.
+  document.body.style.overflow = overlay().innerHTML ? 'hidden' : '';
   wire();
 }
 
 function wire() {
-  const peek = document.getElementById('peekBtn');
-  if (peek) {
-    const area = document.getElementById('revealArea');
-    const on = e => { e.preventDefault(); area.classList.add('revealing'); };
-    const off = e => { e.preventDefault(); area.classList.remove('revealing'); };
-    peek.addEventListener('touchstart', on, { passive: false });
-    peek.addEventListener('touchend', off); peek.addEventListener('touchcancel', off);
-    peek.addEventListener('mousedown', on); peek.addEventListener('mouseup', off);
-    peek.addEventListener('mouseleave', off);
-    peek.addEventListener('contextmenu', e => e.preventDefault());
-  }
   const input = document.getElementById('nameInput');
   if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(false); });
   const codeEl = document.getElementById('codeInput');
@@ -1146,9 +1200,10 @@ document.addEventListener('click', e => {
   else if (a === 'openAccuse') { sheet = 'accuse'; render(); }
   else if (a === 'openStrike') { sheet = 'strike'; render(); }
   else if (a === 'closeSheet') { sheet = null; render(); }
-  else if (a === 'role') { roleOpen = true; drawer = false; render(); }
-  else if (a === 'closeRole') { roleOpen = false; render(); }
-  else if (a === 'drawer') { drawer = true; roleOpen = false; render(); }
+  else if (a === 'role') { roleOpen = true; drawer = false; roleShown = peeking = false; render(); }
+  else if (a === 'closeRole') { roleOpen = false; roleShown = peeking = false; render(); }
+  else if (a === 'toggleRole') { roleShown = !roleShown; peeking = false; render(); }
+  else if (a === 'drawer') { drawer = true; roleOpen = false; unreadRecords = false; render(); }
   else if (a === 'closeDrawer') { drawer = false; render(); }
   else if (a === 'closeRoles') { sheetScript = null; render(); }
   else if (a === 'copyLink') {
@@ -1198,7 +1253,11 @@ async function keepAwake() {
 // A phone coming back from a locked screen must rejoin at once — waiting for the next
 // failed heartbeat is what made people feel kicked out.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') {
+    // never leave a role on screen when the phone is handed over or put down
+    if (roleShown || peeking) { roleShown = peeking = false; render(); }
+    return;
+  }
   if (!wakeLock) keepAwake();
   nudgeConnection();
   render();

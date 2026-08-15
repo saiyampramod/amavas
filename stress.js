@@ -84,24 +84,23 @@ function playOne({ size, script, storyteller, replay }) {
           if (!b.acted.has(k) && !s.nomination) { b.acted.add(k); setTimeout(() => { if (b.state.phase === 'day') send({ type: 'endDay' }); }, 500); }
         }
       }
-      if (s.phase === 'over') {
+      if (s.phase === 'over' && b.first && !b.sawOver) {
+        b.sawOver = true;
         // sanity: the reveal must cover every seated player and name exactly one demon
-        if (b.first && finished === 0) {
-          const rev = s.reveal || [];
-          if (rev.length !== size) fails.push(`${label}: reveal has ${rev.length} of ${size}`);
-          const demons = rev.filter(r => r.kind === 'demon').length;
-          if (demons !== 1) fails.push(`${label}: ${demons} demons in reveal`);
-          if (!s.winner) fails.push(`${label}: finished with no winner`);
-        }
-        if (replay && finished === 0 && b.first) {
-          finished = 1;
+        const rev = s.reveal || [];
+        if (rev.length !== size) fails.push(`${label}: reveal has ${rev.length} of ${size}`);
+        const demons = rev.filter(r => r.kind === 'demon').length;
+        if (demons !== 1) fails.push(`${label}: ${demons} demons in reveal`);
+        if (!s.winner) fails.push(`${label}: finished with no winner`);
+
+        finished++;
+        if (replay && finished < 2) {
+          // genuinely play a second game: clear the flags the lobby block gates on,
+          // otherwise the host can never press start again
+          b.started = false; b.sawOver = false; b.acted.clear();
           return setTimeout(() => send({ type: 'newGame' }), 300);
         }
-        if (!replay || finished === 1) { clearTimeout(timer); ran++; return done(true); }
-      }
-      // after "play again" the host must be able to start a second game
-      if (replay && finished === 1 && s.phase === 'lobby' && b.first && !b.restarted) {
-        b.restarted = true; setTimeout(() => send({ type: 'start' }), 300);
+        clearTimeout(timer); ran++; return done(true);
       }
     }
     bots.push(mk('Host', true));
