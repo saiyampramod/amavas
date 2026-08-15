@@ -986,31 +986,84 @@ function gameOver(winner, reason) {
 // ---------------------------------------------------------------- ws plumbing
 const fail = (ws, text) => ws.send(JSON.stringify({ type: 'error', text }));
 
+// Put someone back in the chair they already own.
+function reseat(p, ws) {
+  if (p.ws && p.ws !== ws && p.ws.readyState === 1) { try { p.ws.close(); } catch {} }
+  p.ws = ws;
+  p.goneAt = null;
+  sockets.set(ws, { playerId: p.id, code: game.code });
+  game.lastSeen = Date.now();
+  // The Storyteller runs the game; if the controls were auto-handed to someone else
+  // while their phone was dark, give them straight back.
+  if (p.storyteller && !p.host) {
+    const holder = game.players.find(q => q.host);
+    if (!holder || holder.hostAuto) {
+      game.players.forEach(q => { q.host = false; q.hostAuto = false; });
+      p.host = true;
+    }
+  }
+}
+
 // Someone is gone — either they tapped Leave, or their socket dropped. Never leave the
 // room unable to continue: free any judgement call they were holding and pass on the
 // host controls. `permanent` also takes their seat out of the game entirely.
+// A dropped socket is almost always a phone locking, a lift, or a two-second network
+// blip — NOT someone leaving. So a disconnect never costs you your seat. We only note
+// when you went quiet; reapAbsent() below deals with people who are genuinely gone.
 function releaseSeat(p, permanent) {
-  if (game.phase === 'lobby' || permanent) {
+  if (permanent) {
     game.players = game.players.filter(q => q.id !== p.id);
     game.players.forEach((q, i) => { q.seat = i; });
     if (game.players.length && !game.players.some(q => q.host)) game.players[0].host = true;
-    if (permanent && game.phase !== 'lobby' && game.phase !== 'over') log(`${p.name} left the game.`);
+    if (game.phase !== 'lobby' && game.phase !== 'over') log(`${p.name} left the game.`);
+  } else {
+    p.goneAt = Date.now();
   }
+  // an open judgement call must never wait on a phone that has gone dark
   if (p.storyteller && game.pendingDecision) {
     const d = game.pendingDecision;
     game.pendingDecision = null;
     log('The Storyteller stepped away; the game decided that one itself.');
     d.resolve(d.auto());
   }
-  if (p.host && game.players.includes(p)) {
-    const heir = game.players.find(q => q !== p && q.ws && q.ws.readyState === 1);
-    if (heir) {
-      p.host = false; heir.host = true;
-      log(`${p.name} dropped off. ${heir.name} is now running the game.`);
-    }
-  }
   if (!game.players.length) rooms.delete(game.code);
 }
+
+const HOST_GRACE = 45 * 1000;    // how long a host may be offline before someone takes over
+const LOBBY_GRACE = 3 * 60 * 1000; // how long a lobby seat is held for someone who never returns
+
+function reapAbsent() {
+  for (const g of rooms.values()) {
+    useRoom(g);
+    const now = Date.now();
+    const connected = q => !!(q.ws && q.ws.readyState === 1);
+    let changed = false;
+
+    // hand over the controls only if the host has really gone, not for a blip
+    const host = game.players.find(q => q.host);
+    if (host && !connected(host) && now - (host.goneAt || 0) > HOST_GRACE) {
+      const heir = game.players.find(q => q !== host && connected(q));
+      if (heir) {
+        host.host = false; heir.host = true; heir.hostAuto = true;
+        log(`${host.name} has been offline a while. ${heir.name} is running the game.`);
+        changed = true;
+      }
+    }
+    // in the lobby, free seats held by people who never came back
+    if (game.phase === 'lobby') {
+      const stale = game.players.filter(q => !connected(q) && q.goneAt && now - q.goneAt > LOBBY_GRACE);
+      if (stale.length) {
+        game.players = game.players.filter(q => !stale.includes(q));
+        game.players.forEach((q, i) => { q.seat = i; });
+        if (game.players.length && !game.players.some(q => q.host)) game.players[0].host = true;
+        changed = true;
+      }
+    }
+    if (!game.players.length) rooms.delete(g.code);
+    else if (changed) broadcast();
+  }
+}
+setInterval(reapAbsent, 15000).unref();
 
 function handleMessage(ws, raw) {
   let msg; try { msg = JSON.parse(raw); } catch { return; }
@@ -1023,9 +1076,7 @@ function handleMessage(ws, raw) {
         const existing = g.players.find(q => q.token === msg.token);
         if (existing) {
           useRoom(g);
-          existing.ws = ws;
-          sockets.set(ws, { playerId: existing.id, code: g.code });
-          g.lastSeen = Date.now();
+          reseat(existing, ws);
           ws.send(JSON.stringify({ type: 'joined', token: existing.token, id: existing.id, code: g.code }));
           broadcast();
           return;
@@ -1054,9 +1105,19 @@ function handleMessage(ws, raw) {
     }
     useRoom(g);
 
+    // Someone typing their own name back in after being bounced should get their seat
+    // back — including mid-game — rather than being told the name is taken by their ghost.
+    const sameName = game.players.find(q => q.name.toLowerCase() === name.toLowerCase());
+    if (sameName) {
+      if (sameName.ws && sameName.ws.readyState === 1) return fail(ws, 'Someone in this room already has that name.');
+      reseat(sameName, ws);
+      ws.send(JSON.stringify({ type: 'joined', token: sameName.token, id: sameName.id, code: game.code }));
+      broadcast();
+      return;
+    }
+
     // new players may join in the lobby, or after a game ends (they'll be in the next one)
     if (game.phase !== 'lobby' && game.phase !== 'over') return fail(ws, 'That game is already under way — wait for the next round.');
-    if (game.players.some(q => q.name.toLowerCase() === name.toLowerCase())) return fail(ws, 'Someone in this room already has that name.');
     if (seated().length >= MAX_PLAYERS) return fail(ws, `That room is full (${MAX_PLAYERS} max).`);
 
     const np = {
@@ -1103,6 +1164,17 @@ function handleMessage(ws, raw) {
     case 'setScript':
       if (p.host && game.phase === 'lobby' && SCRIPTS[msg.id]) { game.scriptId = msg.id; broadcast(); }
       break;
+    case 'makeHost': {
+      // hand the controls to someone else — "you run this one"
+      if (!p.host) break;
+      const t = byId(msg.target);
+      if (!t || t === p || !(t.ws && t.ws.readyState === 1)) break;
+      p.host = false; t.host = true;
+      if (p.storyteller) { p.storyteller = false; }   // the chair goes with the crown
+      log(`${t.name} is running the game now.`);
+      broadcast();
+      break;
+    }
     case 'setStoryteller':
       // Only the host may take or drop the Storyteller chair, and only in the lobby.
       if (p.host && game.phase === 'lobby') {
@@ -1232,8 +1304,8 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 wss.on('connection', ws => {
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
+  ws.missedPongs = 0;
+  ws.on('pong', () => { ws.missedPongs = 0; });
   // the client needs the cast before it has joined anything, for the tutorial
   ws.send(JSON.stringify({
     type: 'hello', scripts: scriptCatalogue(),
@@ -1258,10 +1330,12 @@ wss.on('connection', ws => {
 
 // A long day-phase argument is minutes of silence. Without traffic, hosting proxies drop
 // the socket and free tiers spin the service down mid-game — so keep the line warm.
+// Phones miss pongs constantly — locked screens, lifts, app switches. Terminating on the
+// first miss was cutting people off mid-game, so allow three (~90s) before giving up.
 setInterval(() => {
   for (const ws of wss.clients) {
-    if (ws.isAlive === false) { ws.terminate(); continue; }
-    ws.isAlive = false;
+    ws.missedPongs = (ws.missedPongs || 0) + 1;
+    if (ws.missedPongs > 3) { ws.terminate(); continue; }
     try { ws.ping(); } catch { /* already closing */ }
   }
 }, 30000).unref();

@@ -10,6 +10,7 @@ let booted = false;            // has the opening screen finished?
 let connected = false, slowWake = false, learnOpen = false, learnMode = null;
 let gate = 'welcome';          // welcome (title) -> join (name + room)
 let ackedIntel = 0, lastRoleSeen = null, sheetOpen = false, ackedHeadline = null;
+let confirmLeave = false;
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -17,6 +18,12 @@ const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const ms = (n, cls) => `<span class="ms ${cls || ''}">${n}</span>`;
 
 // ---------------------------------------------------------------- socket
+let reopen = null;
+function nudgeConnection() {
+  if (!ws || ws.readyState === 3 /* CLOSED */) { if (reopen) reopen(); return; }
+  if (ws.readyState === 1) { if (myToken) send({ type: 'join', token: myToken }); }
+}
+
 function connect() {
   let delay = 800;
   // A sleeping free-tier server can take ~30s to wake. Say so rather than look broken.
@@ -34,7 +41,9 @@ function connect() {
       if (m.type === 'joined') { myToken = m.token; localStorage.setItem('nf_token', myToken); }
       else if (m.type === 'left') {
         myToken = null; localStorage.removeItem('nf_token');
-        state = null; joinError = ''; gate = 'welcome'; render();
+        state = null; joinError = ''; gate = 'welcome';
+        confirmLeave = drawer = roleOpen = sheetOpen = false;
+        render();
       }
       else if (m.type === 'error') { joinError = m.text; render(); }
       else if (m.type === 'state') {
@@ -44,8 +53,11 @@ function connect() {
     };
     ws.onclose = () => {
       connected = false; render();
-      setTimeout(open, delay); delay = Math.min(delay * 2, 15000);
+      // reconnect quickly — a phone waking from a locked screen should be back in
+      // the game in a second, not fifteen
+      setTimeout(open, delay); delay = Math.min(delay * 2, 4000);
     };
+    reopen = open;
     ws.onerror = () => ws.close();
   };
   open();
@@ -370,7 +382,12 @@ function lobbyScreen() {
     </div>
     <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3 flex justify-between">
       <span>Roster</span><span>${n} playing</span></h3>
-    <div class="flex flex-col gap-stack-gap">${table().map(p => dossier(p)).join('')}</div>
+    <div class="flex flex-col gap-stack-gap">${table().map(p => `
+      <div class="relative">${dossier(p)}
+        ${you.host && p.id !== you.id && p.connected ? `<button data-makehost="${p.id}"
+          class="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-2 rounded-lg bg-surface-container-high
+          border border-border-subtle text-primary font-label-caps text-[9px] uppercase">Make host</button>` : ''}
+      </div>`).join('')}</div>
   </main>
   ${actionBar(you.host
     ? bigBtn('start', ok ? 'Begin the first night'
@@ -546,6 +563,26 @@ function sheetOverlayScript() {
       ${group('Outsiders', 'outsider', 'Good, and a liability.')}
       ${group('Minions', 'minion', 'Evil, and they know each other.')}
       ${group('The demon', 'demon', 'Kill it and good wins.')}
+    </div>
+  </div>`;
+}
+
+// In-app, because a native confirm() is blocked or ignored in an installed web app.
+function leaveOverlay() {
+  const mid = state.phase === 'night' || state.phase === 'day';
+  return `<div class="fixed inset-0 z-[85] bg-background/95 backdrop-blur-xl flex flex-col justify-end">
+    <div data-act="cancelLeave" class="flex-1"></div>
+    <div class="rounded-t-3xl glass-panel border-t border-border-subtle px-gutter pt-5 pb-8">
+      <div class="w-10 h-1 rounded-full bg-border-subtle mx-auto mb-5"></div>
+      <h3 class="font-headline-lg text-headline-lg text-text-high-contrast">Leave this game?</h3>
+      <p class="font-body-md text-body-md text-on-surface-variant mt-3">
+        ${mid ? `You are in the middle of a round as <b class="text-on-surface">${esc(state.you.role || 'a player')}</b>.
+                 Your seat is given up and your secret goes with it — you cannot come back into this game.`
+              : 'You will be taken back to the start. You can join again with the room code.'}</p>
+      <div class="flex flex-col gap-2 mt-6">
+        ${bigBtn('reallyLeave', 'Yes, leave the game', 'logout', 'danger')}
+        ${bigBtn('cancelLeave', 'Stay', 'close', 'ghost')}
+      </div>
     </div>
   </div>`;
 }
@@ -1014,7 +1051,8 @@ function render() {
     : s === 'day' ? dayScreen()
     : s === 'over' ? overScreen() : '';
   const newHeadline = state.headline && state.headline.id !== ackedHeadline && state.phase !== 'over';
-  overlay().innerHTML = state.offer ? offerOverlay()
+  overlay().innerHTML = confirmLeave ? leaveOverlay()
+    : state.offer ? offerOverlay()
     : state.decision ? decisionOverlay()
     : newHeadline ? headlineOverlay()
     : newIntel ? intelOverlay()
@@ -1077,6 +1115,8 @@ document.addEventListener('click', e => {
   if (rolesBtn) { sheetScript = rolesBtn.dataset.roles; render(); return; }
   const sc = e.target.closest('[data-script]');
   if (sc) { send({ type: 'setScript', id: sc.dataset.script }); return; }
+  const mh = e.target.closest('[data-makehost]');
+  if (mh) { send({ type: 'makeHost', target: mh.dataset.makehost }); return; }
   const md = e.target.closest('[data-mode]');
   if (md) { send({ type: 'setStoryteller', on: md.dataset.mode === 'storyteller' }); return; }
   const btn = e.target.closest('[data-act]');
@@ -1093,9 +1133,9 @@ document.addEventListener('click', e => {
   else if (a === 'learnBack') { learnMode = null; render(); }
   else if (a === 'join') doJoin(false);
   else if (a === 'create') doJoin(true);
-  else if (a === 'leave') {
-    if (confirm('Leave this game and go back?')) send({ type: 'leave' });
-  }
+  else if (a === 'leave') { confirmLeave = true; render(); }
+  else if (a === 'cancelLeave') { confirmLeave = false; render(); }
+  else if (a === 'reallyLeave') { confirmLeave = false; send({ type: 'leave' }); }
   else if (a === 'start') send({ type: 'start' });
   else if (a === 'confirmNight' && selected) { send({ type: 'nightAction', target: selected }); selected = null; }
   else if (a === 'voteYes') send({ type: 'vote', yes: true });
@@ -1155,13 +1195,17 @@ async function keepAwake() {
     wakeLock.addEventListener('release', () => { wakeLock = null; });
   } catch { /* denied, or battery saver — not worth telling the player */ }
 }
+// A phone coming back from a locked screen must rejoin at once — waiting for the next
+// failed heartbeat is what made people feel kicked out.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    if (!wakeLock) keepAwake();
-    // phones suspend sockets in the background; get back in sync immediately
-    if (ws && ws.readyState !== 1) { connected = false; render(); }
-  }
+  if (document.visibilityState !== 'visible') return;
+  if (!wakeLock) keepAwake();
+  nudgeConnection();
+  render();
 });
+window.addEventListener('online', nudgeConnection);
+window.addEventListener('pageshow', nudgeConnection);
+window.addEventListener('focus', nudgeConnection);
 document.addEventListener('click', () => { if (!wakeLock) keepAwake(); }, { once: true });
 
 // Two layers of keepalive: a light ws message so proxies see traffic, and an occasional
