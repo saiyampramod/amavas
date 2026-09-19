@@ -16,7 +16,7 @@ let ackedIntel = 0, lastRoleSeen = null, sheetOpen = false, ackedHeadline = null
 // update replaced — so now the class is derived from state, applied directly for
 // instant feedback, and released from the document so a hold can never get stuck on.
 let confirmLeave = false, roleShown = false, peeking = false;
-let unreadRecords = false, seenIntel = 0;
+let unreadRecords = false, seenIntel = 0, ghostPromptSeen = null;
 
 const roleVisible = () => roleShown || peeking;
 function paintReveal() {
@@ -650,6 +650,30 @@ function leaveOverlay() {
   </div>`;
 }
 
+function ghostVoteOverlay() {
+  const n = state.nomination;
+  return `<div class="fixed inset-0 z-[76] bg-background/97 backdrop-blur-xl overflow-y-auto">
+    <div class="min-h-dvh flex flex-col justify-center px-gutter py-10 max-w-lg mx-auto text-center">
+      <div class="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center
+        bg-surface-container border border-tertiary-container/40 text-tertiary-container boot-moon">
+        <span class="ms" style="font-size:36px">how_to_vote</span></div>
+      <span class="font-label-caps text-label-caps text-tertiary-container uppercase tracking-widest">Your ghost vote</span>
+      <h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-3">
+        ${esc(n.nominator)} wants ${esc(n.nominee)} cast out</h2>
+      <p class="font-body-lg text-body-lg text-on-surface-variant mt-4">
+        Casting out spends <b class="text-on-surface">your one vote for the whole game</b>. Sparing is free
+        and costs you nothing.</p>
+      <p class="font-body-md text-[13px] text-text-muted mt-3">
+        The vote closes as soon as the living have all voted, so decide now &mdash; you will not be waited for.</p>
+      <div class="flex flex-col gap-3 mt-8">
+        ${bigBtn('ghostSpend', `Cast out ${esc(n.nominee)}`, 'gavel', 'danger')}
+        ${bigBtn('ghostSpare', `Spare ${esc(n.nominee)}`, 'health_and_safety', 'primary')}
+        ${bigBtn('ghostKeep', 'Decide later', 'schedule', 'ghost')}
+      </div>
+    </div>
+  </div>`;
+}
+
 function decisionOverlay() {
   const d = state.decision;
   return `<div class="fixed inset-0 z-[70] bg-background/95 backdrop-blur-xl overflow-y-auto">
@@ -860,13 +884,11 @@ function voteScreen() {
   </main>
   ${actionBar(
     n.youEligible && !n.youVoted
-      ? (!you.alive
-          ? `<p class="text-center font-body-md text-[13.5px] text-text-muted mb-2">
-               You have one vote for the whole game. Spend it, or stay quiet and let the living decide.</p>
-             ${bigBtn('voteYes', 'Spend my ghost vote', 'how_to_vote', 'danger')}`
-          : `<div class="grid grid-cols-2 gap-3">
-              ${bigBtn('voteYes', 'Cast out', 'gavel', 'danger')}
-              ${bigBtn('voteNo', 'Spare', 'health_and_safety', 'primary')}</div>`)
+      ? `${!you.alive ? `<p class="text-center font-label-caps text-label-caps text-tertiary-container uppercase mb-2">
+             Cast out spends your one ghost vote &middot; Spare is free</p>` : ''}
+         <div class="grid grid-cols-2 gap-3">
+           ${bigBtn('voteYes', 'Cast out', 'gavel', 'danger')}
+           ${bigBtn('voteNo', 'Spare', 'health_and_safety', 'primary')}</div>`
       : bigBtn('', n.youEligible ? 'Your vote is in' : (you.alive ? 'You cannot vote' : 'Ghost vote spent'), 'check', 'ghost', true)
     + (you.host ? bigBtn('closeNom', 'Host: close vote now', 'timer_off', 'ghost') : ''))}`;
 }
@@ -1172,11 +1194,18 @@ function render() {
     : s === 'day' ? dayScreen()
     : s === 'over' ? overScreen() : '';
   const newHeadline = state.headline && state.headline.id !== ackedHeadline && state.phase !== 'over';
+  // only nudge a ghost who still holds a vote, while a vote is actually open
+  const ghostNeedsPrompt = () => {
+    const n = state.nomination;
+    return !!(n && !st && !state.you.alive && state.you.ghostVote
+      && n.youEligible && !n.youVoted && ghostPromptSeen !== n.id);
+  };
   overlay().innerHTML = confirmLeave ? leaveOverlay()
     : state.offer ? offerOverlay()
     : state.decision ? decisionOverlay()
     : newHeadline ? headlineOverlay()
     : newIntel ? intelOverlay()
+    : ghostNeedsPrompt() ? ghostVoteOverlay()
     : sheetOpen ? sheetOverlayScript()
     : whisperTo ? whisperOverlay()
     : sheetScript ? rolesOverlay()
@@ -1235,7 +1264,10 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   const a = btn.dataset.act;
-  if (a === 'ackHeadline') { ackedHeadline = state.headline && state.headline.id; render(); }
+  if (a === 'ghostSpend') { ghostPromptSeen = state.nomination && state.nomination.id; send({ type: 'vote', yes: true }); }
+  else if (a === 'ghostSpare') { ghostPromptSeen = state.nomination && state.nomination.id; send({ type: 'vote', yes: false }); }
+  else if (a === 'ghostKeep') { ghostPromptSeen = state.nomination && state.nomination.id; render(); }
+  else if (a === 'ackHeadline') { ackedHeadline = state.headline && state.headline.id; render(); }
   else if (a === 'ackIntel') { ackedIntel = (state.you.inbox || []).length; render(); }
   else if (a === 'openSheet') { sheetOpen = true; drawer = false; render(); }
   else if (a === 'closeSheetScript') { sheetOpen = false; render(); }

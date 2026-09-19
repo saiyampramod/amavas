@@ -227,6 +227,7 @@ function stateFor(p) {
     if (game.nomination) {
       const n = game.nomination;
       s.nomination = {
+        id: n.id,
         nominator: byId(n.nominatorId).name,
         nominee: byId(n.nomineeId).name,
         votesCast: Object.keys(n.votes).length,
@@ -886,7 +887,7 @@ function nominate(p, targetId) {
   t.wasNominatedToday = true;
   const eligible = seated().filter(q => q.alive || q.ghostVote).map(q => q.id);
   // (the dead appear here only while they still hold their one vote)
-  game.nomination = { nominatorId: p.id, nomineeId: t.id, votes: {}, eligible };
+  game.nomination = { id: crypto.randomUUID(), nominatorId: p.id, nomineeId: t.id, votes: {}, eligible };
   log(`${p.name} accuses ${t.name} in the society meeting. Votes needed to endanger: ${Math.ceil(alive().length / 2)}.`);
   broadcast();
 }
