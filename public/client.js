@@ -248,9 +248,9 @@ function learnOverlay() {
       <section>
         <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-4">A round</h3>
         <div class="flex flex-col gap-4">
-          ${step(1, 'Night', 'Phones down, nobody speaks. If your role acts at night, your phone asks you to pick someone. Then it tells you what you learned — and some of you are being lied to.')}
+          ${step(1, 'Night', 'Phones down, nobody speaks. <b>Everyone</b> is asked to pick someone — if your role has a night power that choice matters, and if it does not you just get a daft question instead. That way nobody can tell from your screen who really acts. Anything you learn pops up before dawn, and some of you are being lied to.')}
           ${step(2, 'Day', 'Someone is dead. Argue. Claim a role, or lie about one. Compare what people say they learned.')}
-          ${step(3, 'Accuse', 'Anyone can accuse one person per day. If at least half the living agree, they go <i>on the block</i>. A later accusation needs <b>more</b> votes to take their place.')}
+          ${step(3, 'Accuse', 'Anyone alive can accuse one person per day. If at least half the living agree, they go <i>on the block</i>. A later accusation needs <b>more</b> votes to take their place. Nobody has to accuse at all — a quiet day is allowed.')}
           ${step(4, 'Dusk', 'Whoever is on the block is cast out, and their role stays secret. Then night falls again.')}
         </div>
       </section>
@@ -266,6 +266,33 @@ function learnOverlay() {
         </div>
       </section>
       <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">When you die</h3>
+        <div class="glass-panel rounded-xl border border-border-subtle p-4 mb-6">
+          <p class="font-body-md text-body-md text-on-surface">
+            You keep playing. You can still talk, argue, claim things and be believed — dead players
+            often decide the game.</p>
+          <p class="font-body-md text-body-md text-on-surface-variant mt-3">
+            You also get <b class="text-on-surface">one vote for the rest of the game</b>, and the two
+            buttons do very different things:</p>
+          <div class="flex flex-col gap-2 mt-3">
+            <div class="rounded-xl border border-tertiary-container/35 bg-tertiary-container/5 p-3">
+              <p class="font-headline-md text-[15px] text-tertiary-container">Cast out — spends it</p>
+              <p class="font-body-md text-[13.5px] text-on-surface-variant mt-1">
+                Uses your one vote. Once it is gone you cannot vote to cast anyone out again, all game.</p>
+            </div>
+            <div class="rounded-xl border border-primary/30 bg-primary/5 p-3">
+              <p class="font-headline-md text-[15px] text-primary">Spare — free</p>
+              <p class="font-body-md text-[13.5px] text-on-surface-variant mt-1">
+                Costs you nothing, every round. It is really just declining to kill them, which is
+                why it is unlimited.</p>
+            </div>
+          </div>
+          <p class="font-body-md text-[13.5px] text-text-muted mt-3">
+            A vote closes once all the <b class="text-on-surface">living</b> players have voted, so it will
+            not wait for you. When a vote opens you get a prompt asking whether to spend your vote —
+            answer it then, or tap Decide later and use the normal buttons.</p>
+        </div>
+
         <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">Three things that trip people up</h3>
         <div class="flex flex-col gap-2">
           ${[['Dead players keep playing', 'You can still talk, argue and be believed. You get one ghost vote for the whole rest of the game — spend it well.'],
@@ -277,6 +304,29 @@ function learnOverlay() {
         </div>
       </section>
       <section>
+        <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">Who runs the game</h3>
+        <div class="flex flex-col gap-2 mb-6">
+          <div class="glass-panel rounded-xl border border-border-subtle p-3">
+            <p class="font-headline-md text-[16px] text-text-high-contrast">Host mode — everyone plays</p>
+            <p class="font-body-md text-[14px] text-on-surface-variant mt-1">
+              Nobody sits out, and <b class="text-on-surface">the host sees no secrets either</b> — they only
+              press start and end the day. The app quietly keeps the game balanced, and tells you what it
+              did once the game is over.</p>
+          </div>
+          <div class="glass-panel rounded-xl border border-border-subtle p-3">
+            <p class="font-headline-md text-[16px] text-text-high-contrast">Storyteller mode — one sits out</p>
+            <p class="font-body-md text-[14px] text-on-surface-variant mt-1">
+              One person runs it by hand. They see every role, decide what poisoned players are told,
+              whisper clues, and can twist the game.</p>
+          </div>
+          <div class="glass-panel rounded-xl border border-border-subtle p-3">
+            <p class="font-headline-md text-[16px] text-text-high-contrast">The host does not move</p>
+            <p class="font-body-md text-[14px] text-on-surface-variant mt-1">
+              Whoever starts the room keeps it. If their phone dies for a few minutes someone stands in,
+              but the controls come straight back when they return — and they can take them back at any
+              time from Records.</p>
+          </div>
+        </div>
         <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3">The story modes</h3>
         <p class="font-body-md text-[14.5px] text-on-surface-variant mb-3">
           Each one is a different cast with its own villain. Tap to meet them.</p>
@@ -949,14 +999,26 @@ function ghostHero() {
     <h2 class="font-display-lg text-display-lg text-text-high-contrast leading-tight">YOU ARE<br/>A GHOST</h2>
     <p class="font-body-md text-body-md text-on-surface-variant max-w-xs mt-3">
       Your mortal coil has been severed. You may still talk — and haunt the vote.</p>
-    <div class="w-full glass-panel rounded-3xl border border-border-subtle p-5 mt-6 flex items-center justify-between">
-      <div class="text-left">
-        <p class="font-label-caps text-label-caps text-primary uppercase">Post-mortem influence</p>
-        <p class="font-headline-md text-headline-md text-on-surface mt-1">
-          ${you.ghostVote ? '1 Ghost Vote Available' : 'Ghost vote spent'}</p>
+    <div class="w-full glass-panel rounded-3xl border p-5 mt-6
+      ${you.ghostVote ? 'border-primary/30' : 'border-border-subtle'}">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-left min-w-0">
+          <p class="font-label-caps text-label-caps text-primary uppercase">Your vote</p>
+          <p class="font-headline-md text-headline-md text-on-surface mt-1">
+            ${you.ghostVote ? 'One vote left' : 'Vote already spent'}</p>
+        </div>
+        <div class="w-12 h-12 rounded-full bg-surface-container-high border border-primary/20 text-primary
+          flex items-center justify-center shrink-0">${ms('how_to_vote')}</div>
       </div>
-      <div class="w-12 h-12 rounded-full bg-surface-container-high border border-primary/20 text-primary
-        flex items-center justify-center shrink-0">${ms('how_to_vote')}</div>
+      <div class="flex flex-col gap-2 mt-4 text-left">
+        <p class="font-body-md text-[13.5px] text-on-surface-variant">
+          <b class="text-tertiary-container">Cast out</b> spends it — one use for the whole game.</p>
+        <p class="font-body-md text-[13.5px] text-on-surface-variant">
+          <b class="text-primary">Spare</b> is free, as often as you like.</p>
+        <p class="font-body-md text-[13px] text-text-muted mt-1">
+          Votes close once the living have voted, so they will not wait for you. You will be asked
+          when each vote opens.</p>
+      </div>
     </div>
   </section>`;
 }
