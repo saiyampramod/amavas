@@ -83,6 +83,7 @@ function freshGame() {
     pendingOffer: null,     // a defection only its recipient can see
     defectionOffered: false,
     headline: null,         // the last big beat — dawn deaths, dusk executions
+    ownerId: null,          // whose game this is; auto-handover never changes it
     dayNum: 0,
     players: [],
     log: [],
@@ -178,6 +179,8 @@ function stateFor(p) {
     script: { id: game.scriptId, ...scriptOf() },
     code: game.code,
     headline: game.headline,
+    owner: (() => { const o = byId(game.ownerId); return o ? { id: o.id, name: o.name } : null; })(),
+    youOwnRoom: !!(p && p.id === game.ownerId),
     storyteller: theST() ? { id: theST().id, name: theST().name } : null,
     mode: theST() ? 'storyteller' : 'host',
     director: game.director,
@@ -208,7 +211,12 @@ function stateFor(p) {
   if (game.phase === 'night' && p) {
     s.needsAction = game.nightNeeded.includes(p.id) && !(p.id in game.nightActions);
     s.actionPrompt = p.nightPrompt || null;
-    s.waitingOn = game.nightNeeded.filter(id => !(id in game.nightActions)).length;
+    const owing = game.nightNeeded.filter(id => !(id in game.nightActions));
+    s.waitingOn = owing.length;
+    s.waitingNames = owing.map(id => (byId(id) || {}).name).filter(Boolean);
+    s.actedNames = game.nightNeeded
+      .filter(id => id in game.nightActions)
+      .map(id => (byId(id) || {}).name).filter(Boolean);
     const chose = game.nightActions[p.id];
     s.yourChoice = chose ? (byId(chose) || {}).name : null;
     s.yourVerb = p.nightPrompt ? p.nightPrompt.verb : null;
@@ -223,6 +231,10 @@ function stateFor(p) {
         nominee: byId(n.nomineeId).name,
         votesCast: Object.keys(n.votes).length,
         votersTotal: n.eligible.length,
+        pending: n.eligible.filter(id => !(id in n.votes))
+          .map(id => (byId(id) || {}).name).filter(Boolean),
+        voted: n.eligible.filter(id => id in n.votes)
+          .map(id => (byId(id) || {}).name).filter(Boolean),
         youVoted: p ? (p.id in n.votes) : true,
         youEligible: p ? n.eligible.includes(p.id) : false,
       };
@@ -475,18 +487,17 @@ function nightPromptFor(p) {
 // Everyone is asked to do something at night, whether or not it does anything.
 // If only the powerful got a prompt, anyone glancing at your phone would learn what
 // you are — and the "3 still acting" counter would quietly leak how many powers are live.
-const IDLE_PROMPTS = [
-  { verb: 'Watch', text: 'Sleep is not coming. Choose someone to lie awake thinking about.' },
-  { verb: 'Listen', text: 'You hear movement outside. Choose whose door you think it stopped at.' },
-  { verb: 'Dream', text: 'You dream of the society. Choose whose face surfaces in it.' },
-  { verb: 'Suspect', text: 'Choose the person you would least like to be alone with tonight.' },
-];
-
+// Deliberately plain. Flavour text here read as if these players had a power, which
+// wasted real time at the table. Say outright that it does nothing, and say why they
+// are being asked anyway.
 function idlePromptFor(p) {
   const targets = alive().filter(q => q !== p);
   if (!targets.length) return null;
-  const pick_ = IDLE_PROMPTS[(p.seat + game.dayNum) % IDLE_PROMPTS.length];
-  return { verb: pick_.verb, text: pick_.text, targets, decoy: true };
+  return {
+    verb: 'Point at',
+    text: 'You have no power tonight. Point at anyone — it changes nothing. You are asked so that every phone looks the same and nobody can tell who really acts.',
+    targets, decoy: true,
+  };
 }
 
 function startNight() {
@@ -502,7 +513,7 @@ function startNight() {
     if (prompt) {
       p.nightDecoy = !real;
       p.nightPrompt = {
-        verb: prompt.verb, text: prompt.text,
+        verb: prompt.verb, text: prompt.text, decoy: !!prompt.decoy,
         targets: prompt.targets.map(t => ({ id: t.id, name: t.name })),
       };
       game.nightNeeded.push(p.id);
@@ -994,13 +1005,15 @@ function reseat(p, ws) {
   p.goneAt = null;
   sockets.set(ws, { playerId: p.id, code: game.code });
   game.lastSeen = Date.now();
-  // The Storyteller runs the game; if the controls were auto-handed to someone else
-  // while their phone was dark, give them straight back.
-  if (p.storyteller && !p.host) {
+  // If the controls were only lent out while this phone was dark, take them straight
+  // back — for the Storyteller, and for whoever actually owns the room.
+  const owns = p.storyteller || p.id === game.ownerId;
+  if (owns && !p.host) {
     const holder = game.players.find(q => q.host);
     if (!holder || holder.hostAuto) {
       game.players.forEach(q => { q.host = false; q.hostAuto = false; });
       p.host = true;
+      log(`${p.name} is back and running the game again.`);
     }
   }
 }
@@ -1030,7 +1043,9 @@ function releaseSeat(p, permanent) {
   if (!game.players.length) rooms.delete(game.code);
 }
 
-const HOST_GRACE = 45 * 1000;    // how long a host may be offline before someone takes over
+// Long on purpose: the host stepping out of the room, or their phone locking, must not
+// shuffle the controls. Anything shorter and the group loses track of who is running it.
+const HOST_GRACE = Number(process.env.HOST_GRACE_MS || 3 * 60 * 1000);
 const LOBBY_GRACE = 3 * 60 * 1000; // how long a lobby seat is held for someone who never returns
 
 function reapAbsent() {
@@ -1046,7 +1061,7 @@ function reapAbsent() {
       const heir = game.players.find(q => q !== host && connected(q));
       if (heir) {
         host.host = false; heir.host = true; heir.hostAuto = true;
-        log(`${host.name} has been offline a while. ${heir.name} is running the game.`);
+        log(`${host.name} has been offline a while. ${heir.name} is standing in as host — ${host.name} can take it back.`);
         changed = true;
       }
     }
@@ -1128,6 +1143,7 @@ function handleMessage(ws, raw) {
       poisoned: false, protected: false, hunterUsed: false, nominatedToday: false, wasNominatedToday: false,
     };
     game.players.push(np);
+    if (np.host) game.ownerId = np.id;
     sockets.set(ws, { playerId: np.id, code: game.code });
     game.lastSeen = Date.now();
     ws.send(JSON.stringify({ type: 'joined', token: np.token, id: np.id, code: game.code }));
@@ -1170,9 +1186,23 @@ function handleMessage(ws, raw) {
       if (!p.host) break;
       const t = byId(msg.target);
       if (!t || t === p || !(t.ws && t.ws.readyState === 1)) break;
-      p.host = false; t.host = true;
+      p.host = false; p.hostAuto = false;
+      t.host = true; t.hostAuto = false;
+      game.ownerId = t.id;                            // a deliberate handover sticks
       if (p.storyteller) { p.storyteller = false; }   // the chair goes with the crown
       log(`${t.name} is running the game now.`);
+      broadcast();
+      break;
+    }
+    case 'reclaimHost': {
+      // Whoever owns the room can take the controls back, whatever happened while
+      // they were away. Nobody else can.
+      if (p.id !== game.ownerId || p.host) break;
+      const holder = game.players.find(q => q.host);
+      game.players.forEach(q => { q.host = false; q.hostAuto = false; });
+      p.host = true;
+      log(holder ? `${p.name} has taken the controls back from ${holder.name}.`
+                 : `${p.name} is running the game.`);
       broadcast();
       break;
     }

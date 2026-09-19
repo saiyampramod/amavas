@@ -357,6 +357,27 @@ function joinScreen() {
 
 const table = () => state.players.filter(p => !p.storyteller);
 
+// The single most asked question at the table: who are we waiting for? Name them.
+function waitingList(title, pending, done) {
+  return `<div class="w-full glass-panel rounded-xl border p-4 text-left
+      ${pending.length ? 'border-tertiary-container/40' : 'border-primary/30'}">
+    <div class="flex items-center justify-between mb-2">
+      <span class="font-label-caps text-label-caps uppercase ${pending.length ? 'text-tertiary-container' : 'text-primary'}">${esc(title)}</span>
+      <span class="font-label-mono text-label-mono text-text-muted">${pending.length} left</span>
+    </div>
+    ${pending.length
+      ? `<div class="flex flex-wrap gap-1.5">${pending.map(nm =>
+          `<span class="px-2.5 py-1 rounded-full bg-tertiary-container/12 border border-tertiary-container/30
+            text-tertiary-container font-body-md text-[14px]">${esc(nm)}</span>`).join('')}</div>`
+      : `<p class="font-body-md text-[14px] text-primary">Everyone is done.</p>`}
+    ${done && done.length ? `<div class="mt-3 pt-2.5 border-t border-border-subtle">
+      <p class="font-label-caps text-[10px] text-text-muted uppercase mb-1.5">Done</p>
+      <div class="flex flex-wrap gap-1.5">${done.map(nm =>
+        `<span class="px-2.5 py-1 rounded-full bg-surface-container-high text-text-muted font-body-md text-[13.5px]">${esc(nm)}</span>`).join('')}</div>
+    </div>` : ''}
+  </div>`;
+}
+
 function lobbyScreen() {
   const n = state.seatedCount;
   const ok = n >= state.minPlayers && n <= state.maxPlayers;
@@ -754,15 +775,23 @@ function nightScreen() {
     return `${topBar()}
     <main class="pt-24 pb-safe-bottom px-gutter max-w-lg mx-auto fade-up">
       <header class="text-center mb-6">
-        ${chip('Night ' + (state.dayNum + 1), 'primary')}
-        <h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-4">${esc(pr.verb)} someone</h2>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-2">
-          You are <span class="text-primary font-semibold">${esc(you.role)}</span>. ${esc(pr.text)}</p>
+        ${chip('Night ' + (state.dayNum + 1), pr.decoy ? 'mute' : 'primary')}
+        ${pr.decoy
+          ? `<h2 class="font-headline-lg text-headline-lg text-text-muted mt-4">Nothing to do tonight</h2>
+             <p class="font-body-md text-body-md text-on-surface-variant mt-2">
+               You have no night power. Point at anyone &mdash; <b class="text-on-surface">it changes nothing.</b></p>
+             <p class="font-body-md text-[13px] text-text-muted mt-3">
+               Everyone is asked this, so nobody can tell from your screen who actually acts.</p>`
+          : `<h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-4">${esc(pr.verb)} someone</h2>
+             <p class="font-body-md text-body-md text-on-surface-variant mt-2">
+               You are <span class="text-primary font-semibold">${esc(you.role)}</span>. ${esc(pr.text)}</p>`}
       </header>
       <div class="flex flex-col gap-stack-gap">${targets.map(p => dossier(p, { pick: true })).join('')}</div>
     </main>
-    ${actionBar(bigBtn('confirmNight', selected ? `${pr.verb} ${nameOf(selected)}` : 'Select a target',
-      'ads_click', 'primary', !selected))}`;
+    ${actionBar(bigBtn('confirmNight',
+      selected ? (pr.decoy ? `Point at ${nameOf(selected)}` : `${pr.verb} ${nameOf(selected)}`)
+               : (pr.decoy ? 'Point at anyone' : 'Select a target'),
+      'ads_click', pr.decoy ? 'ghost' : 'primary', !selected))}`;
   }
   return `${topBar()}
   <main class="min-h-dvh flex flex-col items-center justify-center pt-20 pb-safe-bottom px-gutter max-w-lg mx-auto text-center fade-up">
@@ -779,16 +808,12 @@ function nightScreen() {
         <div class="font-label-mono text-label-mono text-text-high-contrast mt-2">${state.waitingOn} left</div>
       </div>
     </div>
-    ${state.yourChoice ? `<div class="w-full glass-panel rounded-xl border border-primary/30 p-4">
+    ${state.yourChoice ? `<div class="w-full glass-panel rounded-xl border border-primary/30 p-4 mb-3">
         <p class="font-label-caps text-label-caps text-primary uppercase">You chose</p>
         <p class="font-headline-md text-headline-md text-text-high-contrast mt-1">
           ${esc(state.yourVerb || '')} ${esc(state.yourChoice)}</p>
-        <p class="font-body-md text-[13.5px] text-text-muted mt-2">
-          If that does anything, you will find out before dawn.</p>
-      </div>`
-      : `<div class="w-full glass-panel rounded-xl border border-border-subtle p-4">
-        <p class="font-label-mono text-label-mono text-text-muted">Waiting on ${state.waitingOn} other player(s).</p>
-      </div>`}
+      </div>` : ''}
+    ${waitingList('Still to take their turn', state.waitingNames || [], state.actedNames || [])}
   </main>
   ${actionBar(bigBtn('', 'Waiting for the others', 'lock', 'ghost', true))}`;
 }
@@ -827,8 +852,9 @@ function voteScreen() {
       <p class="font-label-mono text-label-mono text-text-muted mt-3">
         Current block: ${state.onBlock ? esc(state.onBlock) + ' (' + yes + ')' : 'nobody'}</p>
     </section>
-    <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3 flex justify-between">
-      <span>Awaiting decision</span>${ms('hourglass_empty', 'o')}</h3>
+    ${waitingList('Still to vote', n.pending || [], n.voted || [])}
+    <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3 mt-6 flex justify-between">
+      <span>The society</span>${ms('groups', 'o')}</h3>
     <div class="flex flex-col gap-stack-gap">${pending.map(p => dossier(p)).join('')}</div>
   </main>
   ${actionBar(
@@ -852,6 +878,13 @@ function dayScreen() {
       <p class="font-body-md text-body-md text-on-surface-variant mt-2">
         Talk it out loud, face to face. Then accuse and vote here.</p>
     </header>`}
+    ${state.youOwnRoom && !state.you.host ? `<div class="glass-panel rounded-xl border border-tertiary-container/40 p-3 mb-4
+        flex items-center justify-between gap-3">
+        <p class="font-body-md text-[14px] text-on-surface-variant min-w-0">
+          <b class="text-on-surface">${esc((state.players.find(p => p.host) || {}).name || 'Someone else')}</b> is running your game.</p>
+        <button data-act="reclaimHost" class="shrink-0 px-3 py-2 rounded-lg border border-tertiary-container/50
+          text-tertiary-container font-label-caps text-label-caps uppercase">Take back</button>
+      </div>` : ''}
     ${state.headline ? `<div class="glass-panel rounded-xl border p-4 mb-5 flex items-center gap-3
         ${state.headline.kind === 'death' ? 'border-tertiary-container/35' : 'border-border-subtle'}">
         <span class="ms shrink-0 ${state.headline.kind === 'death' ? 'text-tertiary-container' : 'text-text-muted'}"
@@ -1013,6 +1046,26 @@ function roleOverlay() {
   </div>`;
 }
 
+// Who is running the game, stated plainly — and if the controls were lent out while the
+// owner's phone was dark, a one-tap way to take them back.
+function hostCard() {
+  const host = state.players.find(p => p.host);
+  const owner = state.owner;
+  const lentOut = !!(owner && host && host.name !== owner.name);
+  return `<div class="glass-panel rounded-xl border p-4 mt-3
+      ${lentOut && state.youOwnRoom ? 'border-tertiary-container/40' : 'border-border-subtle'}">
+    <p class="font-label-caps text-label-caps text-text-muted uppercase">Running the game</p>
+    <p class="font-headline-md text-[19px] text-text-high-contrast mt-1">
+      ${esc(host ? host.name : 'nobody')}${state.you.host ? ' <span class="text-primary text-[14px] font-label-mono">— you</span>' : ''}</p>
+    ${lentOut ? `<p class="font-body-md text-[13.5px] text-text-muted mt-1">
+        This room belongs to ${esc(owner.name)}${state.youOwnRoom ? ' — that is you' : ''}.
+        The controls were handed over while they were offline.</p>` : ''}
+    ${state.youOwnRoom && !state.you.host
+      ? `<div class="mt-3">${bigBtn('reclaimHost', 'Take the controls back', 'undo', 'primary')}</div>`
+      : ''}
+  </div>`;
+}
+
 function drawerOverlay() {
   const you = state.you;
   const inbox = (you.inbox || []).slice().reverse();
@@ -1033,6 +1086,7 @@ function drawerOverlay() {
           <button data-act="leave" class="px-4 py-2.5 rounded-xl border border-tertiary-container/40
             text-tertiary-container font-label-caps text-label-caps uppercase shrink-0">Leave</button>
         </div>
+        ${hostCard()}
         <div class="mt-3">${bigBtn('openSheet', 'Character sheet for this story', 'menu_book', 'ghost')}</div>
       </section>
       <section>
@@ -1212,6 +1266,7 @@ document.addEventListener('click', e => {
     if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, () => prompt('Copy this link:', url));
     else prompt('Copy this link:', url);
   }
+  else if (a === 'reclaimHost') send({ type: 'reclaimHost' });
   else if (a === 'toggleDirector') send({ type: 'setDirector', on: !state.director });
   else if (a === 'takeOffer') send({ type: 'offer', accept: true });
   else if (a === 'refuseOffer') send({ type: 'offer', accept: false });
