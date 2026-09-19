@@ -231,7 +231,9 @@ function stateFor(p) {
         nominee: byId(n.nomineeId).name,
         votesCast: Object.keys(n.votes).length,
         votersTotal: n.eligible.length,
-        pending: n.eligible.filter(id => !(id in n.votes))
+        pending: n.eligible.filter(id => !(id in n.votes) && (byId(id) || {}).alive)
+          .map(id => (byId(id) || {}).name).filter(Boolean),
+        ghostsPending: n.eligible.filter(id => !(id in n.votes) && !(byId(id) || {}).alive)
           .map(id => (byId(id) || {}).name).filter(Boolean),
         voted: n.eligible.filter(id => id in n.votes)
           .map(id => (byId(id) || {}).name).filter(Boolean),
@@ -883,6 +885,7 @@ function nominate(p, targetId) {
   p.nominatedToday = true;
   t.wasNominatedToday = true;
   const eligible = seated().filter(q => q.alive || q.ghostVote).map(q => q.id);
+  // (the dead appear here only while they still hold their one vote)
   game.nomination = { nominatorId: p.id, nomineeId: t.id, votes: {}, eligible };
   log(`${p.name} accuses ${t.name} in the society meeting. Votes needed to endanger: ${Math.ceil(alive().length / 2)}.`);
   broadcast();
@@ -906,7 +909,11 @@ function castVote(p, yes) {
     p.yesVotes = (p.yesVotes || 0) + 1;
     if (!game.todayYesVoters.includes(p.id)) game.todayYesVoters.push(p.id);
   }
-  if (Object.keys(n.votes).length === n.eligible.length) closeNomination();
+  const livingLeft = n.eligible.filter(id => {
+    const q = byId(id);
+    return q && q.alive && !(q.id in n.votes);
+  });
+  if (!livingLeft.length) closeNomination();
   else broadcast();
 }
 

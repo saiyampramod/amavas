@@ -852,18 +852,21 @@ function voteScreen() {
         Current block: ${state.onBlock ? esc(state.onBlock) + ' (' + yes + ')' : 'nobody'}</p>
     </section>
     ${waitingList('Still to vote', n.pending || [], n.voted || [])}
+    ${(n.ghostsPending || []).length ? `<p class="font-body-md text-[13px] text-text-muted mt-2 text-center">
+      ${n.ghostsPending.length} ghost(s) may still spend a vote &mdash; the vote does not wait for them.</p>` : ''}
     <h3 class="font-label-caps text-label-caps text-text-muted uppercase mb-3 mt-6 flex justify-between">
       <span>The society</span>${ms('groups', 'o')}</h3>
     <div class="flex flex-col gap-stack-gap">${pending.map(p => dossier(p)).join('')}</div>
   </main>
   ${actionBar(
     n.youEligible && !n.youVoted
-      ? `${!you.alive ? `<p class="text-center font-label-caps text-label-caps uppercase mb-1
-            ${you.ghostVote ? 'text-tertiary-container' : 'text-text-muted'}">
-            ${you.ghostVote ? 'Voting to cast out spends your only ghost vote' : 'Your ghost vote is spent — you can still spare'}</p>` : ''}
-        <div class="grid grid-cols-2 gap-3">
-          ${bigBtn('voteYes', !you.alive ? 'Spend ghost vote' : 'Cast out', 'gavel', 'danger', !you.alive && !you.ghostVote)}
-          ${bigBtn('voteNo', 'Spare', 'health_and_safety', 'primary')}</div>`
+      ? (!you.alive
+          ? `<p class="text-center font-body-md text-[13.5px] text-text-muted mb-2">
+               You have one vote for the whole game. Spend it, or stay quiet and let the living decide.</p>
+             ${bigBtn('voteYes', 'Spend my ghost vote', 'how_to_vote', 'danger')}`
+          : `<div class="grid grid-cols-2 gap-3">
+              ${bigBtn('voteYes', 'Cast out', 'gavel', 'danger')}
+              ${bigBtn('voteNo', 'Spare', 'health_and_safety', 'primary')}</div>`)
       : bigBtn('', n.youEligible ? 'Your vote is in' : (you.alive ? 'You cannot vote' : 'Ghost vote spent'), 'check', 'ghost', true)
     + (you.host ? bigBtn('closeNom', 'Host: close vote now', 'timer_off', 'ghost') : ''))}`;
 }
