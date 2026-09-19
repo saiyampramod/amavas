@@ -777,11 +777,10 @@ function nightScreen() {
       <header class="text-center mb-6">
         ${chip('Night ' + (state.dayNum + 1), pr.decoy ? 'mute' : 'primary')}
         ${pr.decoy
-          ? `<h2 class="font-headline-lg text-headline-lg text-text-muted mt-4">Nothing to do tonight</h2>
-             <p class="font-body-md text-body-md text-on-surface-variant mt-2">
-               You have no night power. Point at anyone &mdash; <b class="text-on-surface">it changes nothing.</b></p>
+          ? `<h2 class="font-headline-lg text-[26px] leading-tight text-text-high-contrast mt-4">${esc(pr.text)}</h2>
              <p class="font-body-md text-[13px] text-text-muted mt-3">
-               Everyone is asked this, so nobody can tell from your screen who actually acts.</p>`
+               No power tonight, so this is purely for fun &mdash; it changes nothing, and nobody
+               ever sees your answer. You are asked so every phone looks the same.</p>`
           : `<h2 class="font-headline-lg text-headline-lg text-text-high-contrast mt-4">${esc(pr.verb)} someone</h2>
              <p class="font-body-md text-body-md text-on-surface-variant mt-2">
                You are <span class="text-primary font-semibold">${esc(you.role)}</span>. ${esc(pr.text)}</p>`}
@@ -789,8 +788,8 @@ function nightScreen() {
       <div class="flex flex-col gap-stack-gap">${targets.map(p => dossier(p, { pick: true })).join('')}</div>
     </main>
     ${actionBar(bigBtn('confirmNight',
-      selected ? (pr.decoy ? `Point at ${nameOf(selected)}` : `${pr.verb} ${nameOf(selected)}`)
-               : (pr.decoy ? 'Point at anyone' : 'Select a target'),
+      selected ? (pr.decoy ? `It's ${nameOf(selected)}, obviously` : `${pr.verb} ${nameOf(selected)}`)
+               : (pr.decoy ? 'Go on, pick someone' : 'Select a target'),
       'ads_click', pr.decoy ? 'ghost' : 'primary', !selected))}`;
   }
   return `${topBar()}

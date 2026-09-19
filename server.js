@@ -487,17 +487,35 @@ function nightPromptFor(p) {
 // Everyone is asked to do something at night, whether or not it does anything.
 // If only the powerful got a prompt, anyone glancing at your phone would learn what
 // you are — and the "3 still acting" counter would quietly leak how many powers are live.
-// Deliberately plain. Flavour text here read as if these players had a power, which
-// wasted real time at the table. Say outright that it does nothing, and say why they
-// are being asked anyway.
+// Players with no night power still get a prompt, so every phone looks alike. Rather
+// than dry filler, ask them something daft. Answers are never shown to anyone — revealing
+// them would expose exactly who has no power, which is the whole thing we are hiding.
+const IDLE_QUESTIONS = [
+  'Who is most likely to ghost the group chat for three weeks?',
+  'Who is most likely to say "one more round" and then leave first?',
+  'Who is most likely to order biryani at 2am?',
+  'Who is most likely to reply just "k"?',
+  'Who is most likely to argue with an auto driver and lose?',
+  'Who is most likely to be late to their own wedding?',
+  'Who is most likely to blame the WiFi for everything?',
+  'Who is most likely to have 47 unread WhatsApp groups?',
+  'Who is most likely to cry at an insurance advert?',
+  'Who is most likely to fake a phone call to escape a party?',
+  'Who is most likely to bring up their gym routine unprompted?',
+  'Who is most likely to actually read the terms and conditions?',
+  'Who is most likely to lose their phone in this exact room?',
+  'Who is most likely to take the last slice without asking?',
+  'Who is most likely to start a company selling socks by subscription?',
+  'Who is most likely to fall asleep before this game ends?',
+  'Who is most likely to survive a zombie outbreak on charm alone?',
+  'Who is most likely to put pineapple on a dosa?',
+];
+
 function idlePromptFor(p) {
   const targets = alive().filter(q => q !== p);
   if (!targets.length) return null;
-  return {
-    verb: 'Point at',
-    text: 'You have no power tonight. Point at anyone — it changes nothing. You are asked so that every phone looks the same and nobody can tell who really acts.',
-    targets, decoy: true,
-  };
+  const i = (p.seat * 5 + game.dayNum * 7) % IDLE_QUESTIONS.length;
+  return { verb: 'Blame', text: IDLE_QUESTIONS[i], targets, decoy: true };
 }
 
 function startNight() {
