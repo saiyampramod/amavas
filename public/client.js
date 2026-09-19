@@ -858,10 +858,13 @@ function voteScreen() {
   </main>
   ${actionBar(
     n.youEligible && !n.youVoted
-      ? `<div class="grid grid-cols-2 gap-3">
-          ${bigBtn('voteYes', 'Cast out', 'gavel', 'danger')}
+      ? `${!you.alive ? `<p class="text-center font-label-caps text-label-caps uppercase mb-1
+            ${you.ghostVote ? 'text-tertiary-container' : 'text-text-muted'}">
+            ${you.ghostVote ? 'Voting to cast out spends your only ghost vote' : 'Your ghost vote is spent — you can still spare'}</p>` : ''}
+        <div class="grid grid-cols-2 gap-3">
+          ${bigBtn('voteYes', !you.alive ? 'Spend ghost vote' : 'Cast out', 'gavel', 'danger', !you.alive && !you.ghostVote)}
           ${bigBtn('voteNo', 'Spare', 'health_and_safety', 'primary')}</div>`
-      : bigBtn('', n.youEligible ? 'Your vote is in' : 'You cannot vote', 'check', 'ghost', true)
+      : bigBtn('', n.youEligible ? 'Your vote is in' : (you.alive ? 'You cannot vote' : 'Ghost vote spent'), 'check', 'ghost', true)
     + (you.host ? bigBtn('closeNom', 'Host: close vote now', 'timer_off', 'ghost') : ''))}`;
 }
 

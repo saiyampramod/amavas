@@ -894,6 +894,13 @@ function castVote(p, yes) {
   yes = !!yes;
   // Chamcha cannot bring themselves to say no
   if (p.role === 'Chamcha' && p.alive && !p.poisoned) yes = true;
+  // The dead get one vote for the whole game, and only raising a hand costs it.
+  // Checked here, not just against the snapshot taken when the nomination opened,
+  // and spent immediately so their phone stops offering a vote they no longer have.
+  if (!p.alive) {
+    if (yes && !p.ghostVote) return;
+    if (yes) { p.ghostVote = false; tell(p, 'You spent your ghost vote.'); }
+  }
   n.votes[p.id] = yes;
   if (yes) {
     p.yesVotes = (p.yesVotes || 0) + 1;
@@ -909,11 +916,6 @@ function closeNomination() {
   // Broker: a bought vote counts for nothing today
   const counts = id => byId(id).voteBlockedDay !== game.dayNum;
   const yes = Object.entries(n.votes).filter(([id, v]) => v && counts(id));
-  // dead voters spend their ghost vote only on a YES
-  for (const [id, v] of Object.entries(n.votes)) {
-    const q = byId(id);
-    if (v && !q.alive) q.ghostVote = false;
-  }
   let tally = yes.length;
   // Landlord: a living, unpoisoned Landlord's YES counts twice (secretly)
   for (const [id] of yes) {
